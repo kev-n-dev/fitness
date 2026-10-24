@@ -1902,6 +1902,67 @@ button.wl-summary{width:100%;padding:0 0 10px;text-align:start;border-radius:var
   :root[data-theme="light"] .today-row:hover{background:color-mix(in srgb,var(--surface-2),var(--surface-3) 85%)}
 }
 
+/* --------------------------------------------------------- goals grid --- */
+.goals-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;
+}
+.goal-tile{
+  background:var(--surface);border-radius:var(--r-card);padding:14px 14px 12px;
+  display:flex;flex-direction:column;gap:4px;
+  transition:background var(--fast);
+}
+.goal-tile.tappable:active{background:var(--surface-2)}
+@media (hover:hover){.goal-tile.tappable:hover{background:var(--surface-2)}}
+.goal-tile-top{display:flex;align-items:center;gap:10px}
+/* Ring container: stack the icon on top of the SVG ring */
+.goal-tile-ring{position:relative;width:54px;height:54px;flex:none}
+.goal-tile-ring .icn,.goal-tile-ring svg{position:absolute;inset:0;margin:auto}
+.goal-tile-ring .goal-tile-icon{width:18px;height:18px;--icon-stroke:2}
+.goal-tile-vals{flex:1;min-width:0}
+.goal-tile-val{font-size:18px;font-weight:700;letter-spacing:-.022em;line-height:1.15}
+.goal-tile-label{font-size:12px;font-weight:500;color:var(--label-3);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.goal-tile-actions{display:flex;gap:6px;margin-top:8px}
+
+/* -------------------------------------------- health monitor card grid --- */
+.health-monitor-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:10px;
+}
+.health-monitor-tile{
+  display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px;
+  padding:10px 4px;border-radius:var(--r);background:var(--surface-2);
+}
+.health-monitor-tile .lrow-i{
+  width:36px;height:36px;border-radius:10px;flex:none;
+}
+
+/* ─────────────────────────────────────────────── profile (UserProfile) ── */
+
+/* Avatar button — camera overlay fades in on hover/focus/active */
+.profile-avatar-btn .profile-avatar-overlay{
+  position:absolute;inset:0;border-radius:50%;
+  background:rgba(0,0,0,0);
+  display:flex;align-items:center;justify-content:center;
+  transition:background var(--fast);pointer-events:none;
+}
+.profile-avatar-btn .profile-avatar-overlay .icn{
+  opacity:0;transition:opacity var(--fast);
+}
+.profile-avatar-btn:hover .profile-avatar-overlay{background:rgba(0,0,0,.38)}
+.profile-avatar-btn:focus-visible .profile-avatar-overlay{background:rgba(0,0,0,.38)}
+.profile-avatar-btn:active .profile-avatar-overlay{background:rgba(0,0,0,.46)}
+.profile-avatar-btn:hover .profile-avatar-overlay .icn,
+.profile-avatar-btn:focus-visible .profile-avatar-overlay .icn,
+.profile-avatar-btn:active .profile-avatar-overlay .icn{opacity:1}
+/* On touch-primary devices: always show the camera hint (no hover state) */
+@media (hover:none){
+  .profile-avatar-btn .profile-avatar-overlay{background:rgba(0,0,0,.22)}
+  .profile-avatar-btn .profile-avatar-overlay .icn{opacity:1}
+}
+
+/* Name button — subtle press feedback */
+.profile-name-btn:hover{background:var(--surface-2)!important}
+.profile-name-btn:active{background:var(--surface-3)!important}
+
 /* --------------------------------------------------- desktop (≥1000px) --- */
 .cols{display:block}
 @media (min-width:1000px){
@@ -1983,6 +2044,29 @@ button.wl-summary{width:100%;padding:0 0 10px;text-align:start;border-radius:var
 .ci-dots{display:flex;justify-content:center;gap:7px;margin-top:4px}
 .ci-dot{width:7px;height:7px;border-radius:50%;background:var(--surface-3);transition:background var(--fast),transform var(--fast)}
 .ci-dot.on{background:var(--acc);transform:scale(1.15)}
+/* Manual-entry card face — shown instead of the QR canvas when fmt is null. Large text on a
+   tinted plate so the number is easy to read at arm's length at a reception desk. */
+.ci-member-plate{
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface-2);border-radius:var(--r-lg);
+  padding:24px 20px;width:100%;box-sizing:border-box;min-height:110px;
+}
+.ci-member-id{
+  font-size:30px;font-weight:700;letter-spacing:.03em;text-align:center;
+  word-break:break-all;font-variant-numeric:tabular-nums;color:var(--label);line-height:1.2;
+}
+/* Payment reminder pill at the bottom of a card. Green = plenty of time, orange = due soon
+   (≤7 days), red = overdue. Uses the same color-mix pattern as .btn.danger / .conn-bar so
+   it works in both dark and light themes without a media query. */
+.ci-payment{
+  display:flex;align-items:center;gap:6px;
+  font-size:13px;font-weight:500;padding:7px 12px;
+  border-radius:var(--r-md);width:100%;box-sizing:border-box;
+}
+.ci-payment .icn{font-size:14px;flex:none}
+.ci-payment.ok{background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)}
+.ci-payment.soon{background:color-mix(in srgb,var(--orange) 14%,transparent);color:var(--orange)}
+.ci-payment.overdue{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
 /* browser camera sheet (components/CameraScan.jsx): the video fills a portrait plate, a dashed
    square in the middle says "put the code here" — decoding reads the whole frame regardless. */
 .cam-wrap{position:relative;width:100%;aspect-ratio:3/4;max-height:58vh;border-radius:var(--r-lg);overflow:hidden;background:#000}

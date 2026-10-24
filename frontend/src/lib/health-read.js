@@ -1,29 +1,36 @@
-// health-read.js — reads vitals, steps, distance, calories and exercise sessions
-// from Health Connect on Android and pipes them into the app's state and rank scoring.
+// health-read.js — reads vitals, steps, distance, calories, clinical metrics,
+// sleep, nutrition and exercise sessions from Health Connect on Android.
 //
 // ── What this reads ───────────────────────────────────────────────────────────
 //
-//  steps        Daily step count (from phone, watch, or any paired app)
-//  distanceM    Daily distance in metres
-//  calories     Active (exercise) calories burned — not BMR
-//  avgBpm       Average heart rate across all HR samples for the day
-//  minBpm/maxBpm Daily HR range
+// Basic vitals (existing)
+//   steps        Daily step count
+//   distanceM    Daily distance in metres
+//   calories     Active (exercise) calories burned
+//   avgBpm/minBpm/maxBpm   Heart rate range for the day
 //
-//  sessions     Exercise sessions logged in any app for the last 90 days.
-//               Used to auto-import runs into S.runs so they contribute to
-//               RUN Rank without the user having to start a run in this app.
-//               openGym's own sessions are excluded to avoid duplicates.
+// Extended clinical vitals (new)
+//   restingBpm   Daily resting heart rate
+//   hrvMs        Heart rate variability (RMSSD in ms)
+//   spo2         Blood oxygen saturation (%)
+//   respiratoryRate  Breaths per minute
+//   vo2Max       VO2 Max (ml/kg/min) — uses a 90-day window
+//   irregularRhythmAlert  true if a Fitbit/Pixel Watch AFib alert exists today
+//   mood         Latest mood rating 1–5 (0 = none)
+//
+// Sleep (new)
+//   sleep.startMs / endMs / durationMs
+//   sleep.stages.lightMs / deepMs / remMs / awakeMs
+//
+// Nutrition from other apps (new, read-only summary)
+//   hcNutrition.calories / protein / carbs / fat / fiber / sugar / saturatedFat / sodium / water
+//
+// Exercise sessions (existing — for auto-import of runs)
 //
 // ── Privacy ───────────────────────────────────────────────────────────────────
 //  Off by default. The user must explicitly enable "Read from Health Connect"
-//  in Settings. Nothing is sent to the server — vitals are cached locally in
-//  opengym-health-read.json, same as the write side uses opengym-health.json.
-//
-// ── Source apps ───────────────────────────────────────────────────────────────
-//  Any app that writes to Health Connect contributes: Google Fit, Strava,
-//  Garmin Connect, Samsung Health, Fitbit, Apple Health (via HC bridge), etc.
-//  The source package name is stored on imported sessions so it can be shown
-//  in the UI ("Imported from Strava").
+//  in Settings. The full vitals object is cached locally in
+//  opengym-health-read.json and never sent to the server.
 
 import { MOBILE, isAndroid, readJsonFile, writeJsonFile } from './mobile.js'
 
@@ -31,7 +38,6 @@ export const HEALTH_READ_FILE = 'opengym-health-read.json'
 
 const INITIAL = { on: false, grantedAt: null, lastReadAt: 0, vitals: {}, error: null }
 
-// Cached state — same pattern as health-sync.js
 let cached = null
 async function loadRead() {
   if (cached) return cached
@@ -41,7 +47,6 @@ async function loadRead() {
 }
 const saveRead = r => { cached = r; return writeJsonFile(HEALTH_READ_FILE, r) }
 
-// Plugin proxy — same lazy-load pattern as health-sync.js
 let pluginP = null
 const plugin = () => pluginP || (pluginP = (async () => {
   if (!(await isAndroid())) return null
@@ -68,8 +73,8 @@ export async function healthReadStatus() {
 // ── Enable / disable ──────────────────────────────────────────────────────────
 
 /**
- * Prompts the user for the five read permissions, then does an initial read.
- * Returns { ok, reason }.
+ * Prompts the user for all read permissions (basic + extended), then does an
+ * initial read. Returns { ok, reason }.
  */
 export async function enableHealthRead(onVitalsReady) {
   const p = await plugin()
@@ -96,11 +101,11 @@ export async function disableHealthRead() {
 // ── Read ──────────────────────────────────────────────────────────────────────
 
 /**
- * Reads today's vitals + the last 90 days of exercise sessions from Health Connect.
- * Returns { vitals, importedRuns } and calls onReady(result) when done.
+ * Reads all available health data for today and hands results to onReady.
+ * Returns { vitals, importedRuns }.
  *
- * vitals:       { steps, distanceM, calories, avgBpm, minBpm, maxBpm, date }
- * importedRuns: Run objects ready to merge into S.runs
+ * Gracefully handles missing permissions or unavailable plugin methods: any
+ * field that cannot be read is omitted from vitals (defaults to 0 / null in UI).
  */
 export async function refreshVitals(onReady) {
   if (!MOBILE) return null
@@ -111,20 +116,56 @@ export async function refreshVitals(onReady) {
 
   try {
     const today = todayBounds()
+    // Sleep looks back 36 h to catch last night even if you wake after midnight.
+    const sleepStart = today.start - 36 * 3600000
 
-    // ── Today's vitals ────────────────────────────────────────────────────────
+    // ── Basic daily vitals ────────────────────────────────────────────────────
     const daily = await p.HC.readDaily({ startMs: today.start, endMs: today.end })
     const vitals = {
-      date:       todayISO(),
-      steps:      daily.steps     || 0,
-      distanceM:  daily.distanceM || 0,
-      calories:   Math.round(daily.calories || 0),
-      avgBpm:     daily.avgBpm    || 0,
-      minBpm:     daily.minBpm    || 0,
-      maxBpm:     daily.maxBpm    || 0,
+      date:      todayISO(),
+      steps:     daily.steps     || 0,
+      distanceM: daily.distanceM || 0,
+      calories:  Math.round(daily.calories || 0),
+      avgBpm:    daily.avgBpm    || 0,
+      minBpm:    daily.minBpm    || 0,
+      maxBpm:    daily.maxBpm    || 0,
     }
 
-    // ── Exercise sessions from other apps ─────────────────────────────────────
+    // ── Extended clinical vitals + sleep + nutrition (parallel, all optional) ─
+    const [extR, sleepR, nutritionR] = await Promise.allSettled([
+      p.HC.readExtendedVitals({ startMs: today.start, endMs: today.end }).catch(() => null),
+      p.HC.readSleep({ startMs: sleepStart, endMs: today.end }).catch(() => null),
+      p.HC.readNutrition({ startMs: today.start, endMs: today.end }).catch(() => null),
+    ])
+
+    const ext = extR.status === 'fulfilled' ? extR.value : null
+    if (ext) {
+      if (ext.restingBpm      > 0) vitals.restingBpm      = ext.restingBpm
+      if (ext.hrvMs           > 0) vitals.hrvMs            = ext.hrvMs
+      if (ext.spo2            > 0) vitals.spo2             = Math.round(ext.spo2 * 10) / 10
+      if (ext.respiratoryRate > 0) vitals.respiratoryRate  = Math.round(ext.respiratoryRate * 10) / 10
+      if (ext.vo2Max          > 0) vitals.vo2Max           = Math.round(ext.vo2Max * 10) / 10
+      if (ext.irregularRhythmAlert) vitals.irregularRhythmAlert = true
+      if (ext.mood            > 0) vitals.mood             = ext.mood
+    }
+
+    const sleepData = sleepR.status === 'fulfilled' ? sleepR.value : null
+    if (sleepData?.sessions?.length) {
+      // Use the longest session (usually the full night's sleep).
+      const longest = sleepData.sessions.reduce((a, b) =>
+        (b.endMs - b.startMs) > (a.endMs - a.startMs) ? b : a)
+      vitals.sleep = {
+        startMs:    longest.startMs,
+        endMs:      longest.endMs,
+        durationMs: longest.endMs - longest.startMs,
+        stages:     longest.stages || {},
+      }
+    }
+
+    const nutritionData = nutritionR.status === 'fulfilled' ? nutritionR.value : null
+    if (nutritionData) vitals.hcNutrition = summarizeHCNutrition(nutritionData)
+
+    // ── Exercise sessions from other apps (existing, for run import) ──────────
     const ninety = Date.now() - 90 * 86400000
     const sessResp = await p.HC.readExerciseSessions({ startMs: ninety, endMs: Date.now() })
     const importedRuns = (sessResp.sessions || [])
@@ -150,6 +191,33 @@ export async function getCachedVitals() {
   return h.vitals || null
 }
 
+/** Returns cached sleep data without hitting Health Connect. */
+export async function getCachedSleep() {
+  const h = await loadRead()
+  return h.vitals?.sleep || null
+}
+
+/** Returns cached extended clinical vitals (resting HR, HRV, SpO2, etc.). */
+export async function getCachedExtendedVitals() {
+  const h = await loadRead()
+  const v = h.vitals || {}
+  return {
+    restingBpm:          v.restingBpm          || 0,
+    hrvMs:               v.hrvMs               || 0,
+    spo2:                v.spo2                || 0,
+    respiratoryRate:     v.respiratoryRate      || 0,
+    vo2Max:              v.vo2Max              || 0,
+    irregularRhythmAlert: v.irregularRhythmAlert || false,
+    mood:                v.mood                || 0,
+  }
+}
+
+/** Returns nutrition data logged today by other HC apps. */
+export async function getCachedHCNutrition() {
+  const h = await loadRead()
+  return h.vitals?.hcNutrition || null
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const RUNNING_TYPES = new Set(['running', 'walking', 'hiking', 'biking'])
@@ -165,22 +233,39 @@ function todayISO() {
 }
 
 /**
+ * Aggregates all nutrition records from other HC apps into a single daily summary.
+ * The app's own meals (written back via health-sync.js) are excluded by clientRecordId
+ * prefix on the native side; here we just sum what the plugin returns.
+ */
+function summarizeHCNutrition(data) {
+  const keys = ['calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'saturatedFat', 'sodium']
+  const totals = Object.fromEntries([...keys, 'water'].map(k => [k, 0]))
+  for (const n of data.nutrition || []) {
+    for (const k of keys) if (n[k] > 0) totals[k] += n[k]
+  }
+  for (const h of data.hydration || []) {
+    if (h.volumeMl > 0) totals.water += h.volumeMl
+  }
+  for (const k of Object.keys(totals)) totals[k] = Math.round(totals[k])
+  return totals
+}
+
+/**
  * Converts a Health Connect exercise session to an S.runs entry.
  * Deduplication: the HC session id is stored so we never import the same run twice.
  */
 function hcSessionToRun(s) {
   const durationSec = Math.round((s.endMs - s.startMs) / 1000)
   if (durationSec < 60) return null
-  // distanceM may be 0 for sessions that didn't track GPS (e.g. a treadmill run)
   const distanceKm = s.distanceM > 0 ? s.distanceM / 1000 : 0
   return {
-    id:          'hc-' + s.id,          // prefix to distinguish from GPS runs
-    date:        new Date(s.startMs).toISOString().slice(0, 10),
+    id:           'hc-' + s.id,
+    date:         new Date(s.startMs).toISOString().slice(0, 10),
     distanceKm,
     durationSec,
     paceSecPerKm: distanceKm > 0 ? Math.round(durationSec / distanceKm) : 0,
-    routePoints: [],
-    source:       s.source || 'health_connect',  // package name of origin app
+    routePoints:  [],
+    source:       s.source || 'health_connect',
     hcSessionId:  s.id,
     createdAt:    s.startMs,
   }
@@ -189,7 +274,6 @@ function hcSessionToRun(s) {
 /**
  * Merges Health Connect imported runs into S.runs.
  * Existing runs with the same hcSessionId are not re-added.
- * Returns the updated runs array (or the original if nothing changed).
  */
 export function mergeImportedRuns(existing, importedRuns) {
   if (!importedRuns?.length) return existing
@@ -201,19 +285,22 @@ export function mergeImportedRuns(existing, importedRuns) {
 
 /**
  * Friendly display name for a source app package name.
- * Shown as "Imported from Strava" etc.
  */
 export function sourceLabel(pkg) {
   const map = {
-    'com.google.android.apps.fitness':   'Google Fit',
-    'com.strava':                        'Strava',
-    'com.garmin.android.apps.connectmobile': 'Garmin Connect',
-    'com.samsung.android.shealth':       'Samsung Health',
-    'com.fitbit.FitbitMobile':           'Fitbit',
-    'com.nike.plusgps':                  'Nike Run Club',
-    'com.adidas.runtastic':              'Runtastic',
-    'com.mapmyrun.android2':             'MapMyRun',
-    'com.under_armour.record':           'MapMyRun',
+    'com.google.android.apps.fitness':           'Google Fit',
+    'com.strava':                                'Strava',
+    'com.garmin.android.apps.connectmobile':     'Garmin Connect',
+    'com.samsung.android.shealth':               'Samsung Health',
+    'com.fitbit.FitbitMobile':                   'Fitbit',
+    'com.nike.plusgps':                          'Nike Run Club',
+    'com.adidas.runtastic':                      'Runtastic',
+    'com.mapmyrun.android2':                     'MapMyRun',
+    'com.under_armour.record':                   'MapMyRun',
+    'com.polar.polarbeatapp':                    'Polar Beat',
+    'com.withings.health':                       'Withings',
+    'com.google.android.apps.wellbeing':         'Digital Wellbeing',
+    'com.google.android.apps.healthdata':        'Health Connect',
   }
   return map[pkg] || 'Health Connect'
 }

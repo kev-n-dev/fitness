@@ -8,13 +8,13 @@
 //
 // The web build never gets here (MOBILE is a build-time flag), and iOS answers 'unsupported'.
 import { MOBILE, isAndroid, readJsonFile, writeJsonFile } from './mobile.js'
-import { healthRecords, planSync, writtenIds } from './health-connect.js'
+import { healthRecords, planSync, writtenIds, nutritionRecords, planNutritionSync, writtenNutritionIds } from './health-connect.js'
 import { exerciseNameFor } from './i18n-core.js'
 import { EXIDX } from './exercises.js'
 import { speedUnitOf } from './speed.js'
 
 export const HEALTH_FILE = 'opengym-health.json'
-const OFF = { on: false, written: {}, at: 0, error: null }
+const OFF = { on: false, written: {}, writtenNutrition: {}, at: 0, error: null }
 
 // Wrapped in an object, as in rest-alert.js: a Capacitor plugin proxy answers `then`, so a
 // promise resolved with the bare proxy never settles.
@@ -31,7 +31,7 @@ let cached = null
 export async function loadHealth() {
   if (cached) return cached
   const f = await readJsonFile(HEALTH_FILE)
-  cached = f && typeof f === 'object' ? { ...OFF, ...f, written: f.written && typeof f.written === 'object' ? f.written : {} } : { ...OFF }
+  cached = f && typeof f === 'object' ? { ...OFF, ...f, written: f.written && typeof f.written === 'object' ? f.written : {}, writtenNutrition: f.writtenNutrition && typeof f.writtenNutrition === 'object' ? f.writtenNutrition : {} } : { ...OFF }
   return cached
 }
 const saveHealth = h => { cached = h; return writeJsonFile(HEALTH_FILE, h) }
@@ -151,17 +151,77 @@ export async function disableHealth({ removeWritten = false } = {}) {
   const h = await loadHealth()
   if (removeWritten) {
     const ids = writtenIds(h.written)
-    if (ids.sessions.length || ids.weights.length) {
+    const nIds = writtenNutritionIds(h.writtenNutrition)
+    if (ids.sessions.length || ids.weights.length || nIds.nutrition.length || nIds.hydration.length) {
       const p = await plugin()
       if (!p) throw new Error('unavailable')
       await p.HC.remove(ids)
+      if (nIds.nutrition.length || nIds.hydration.length) {
+        await p.HC.removeNutrition(nIds).catch(() => {})  // best-effort; older plugin versions may not have this
+      }
     }
   }
-  const out = { ...h, on: false, error: null, written: removeWritten ? {} : h.written }
+  const out = { ...h, on: false, error: null, written: removeWritten ? {} : h.written, writtenNutrition: removeWritten ? {} : h.writtenNutrition }
   await saveHealth(out)
   told(out)
   return out
 }
+
+// ── Nutrition + hydration write sync ─────────────────────────────────────────
+
+let nutritionRunning = null
+let nutritionAgain = null
+
+/**
+ * Writes meals (nutrition + hydration records) to Health Connect in sync with S.meals.
+ * No-op while HC write is off or the plugin method isn't available (pre-update plugin).
+ */
+export function syncNutritionHealth(S) {
+  if (!MOBILE) return Promise.resolve(null)
+  if (!cached || !cached.on) return Promise.resolve(cached)
+  if (nutritionRunning) { nutritionAgain = S; return nutritionRunning }
+  nutritionAgain = null
+  nutritionRunning = (async () => {
+    let h = await loadHealth()
+    let next = S
+    while (next) {
+      if (h.on) h = await syncNutritionOnce(next, h)
+      next = nutritionAgain
+      nutritionAgain = null
+    }
+    return h
+  })().finally(() => { nutritionRunning = null })
+  return nutritionRunning
+}
+
+async function syncNutritionOnce(S, h) {
+  const p = await plugin()
+  if (!p || typeof p.HC.writeNutrition !== 'function') return h   // plugin not yet updated
+  const plan = planNutritionSync(nutritionRecords(S), h.writtenNutrition)
+  const nothing = !plan.nutrition.length && !plan.hydration.length &&
+                  !plan.remove.nutrition.length && !plan.remove.hydration.length
+  if (nothing) return h
+  let out = { ...h }
+  try {
+    if (plan.nutrition.length || plan.hydration.length) {
+      await p.HC.writeNutrition({ nutrition: plan.nutrition, hydration: plan.hydration })
+      const kept = Object.fromEntries(
+        Object.entries(h.writtenNutrition || {}).filter(([id]) => !plan.writtenNutrition[id]))
+      out.writtenNutrition = { ...kept, ...plan.writtenNutrition }
+    }
+    if (plan.remove.nutrition.length || plan.remove.hydration.length) {
+      await p.HC.removeNutrition(plan.remove).catch(() => {})
+    }
+    out = { ...out, writtenNutrition: plan.writtenNutrition }
+  } catch (e) {
+    // Nutrition sync errors don't affect the main health sync error state
+  }
+  await saveHealth(out)
+  told(out)
+  return out
+}
+
+// ── App lifecycle / init ──────────────────────────────────────────────────────
 
 // Back in the foreground: a change synced from another device while the phone was away, or a
 // permission the user granted again in Health Connect's own settings, is picked up then.
@@ -170,11 +230,18 @@ export function initHealthSync(getState) {
   if (!MOBILE || started) return
   started = true
   import('@capacitor/app').then(({ App }) => {
-    App.addListener('appStateChange', ({ isActive }) => { if (isActive) syncHealth(getState()).catch(() => {}) })
+    App.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) {
+        syncHealth(getState()).catch(() => {})
+        syncNutritionHealth(getState()).catch(() => {})
+      }
+    })
   }).catch(() => {})
-  // Once at launch, for a workout finished just before the app was closed. Reading the file here
-  // also settles whether it is on, which the saves wait for (syncHealth).
-  setTimeout(() => loadHealth().then(() => syncHealth(getState())).catch(() => {}), 3000)
+  // Once at launch, for a workout finished just before the app was closed.
+  setTimeout(() => loadHealth().then(() => {
+    syncHealth(getState()).catch(() => {})
+    syncNutritionHealth(getState()).catch(() => {})
+  }).catch(() => {}), 3000)
 }
 
 // ── Health Connect read-side integration ────────────────────────────────────

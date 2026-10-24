@@ -181,8 +181,11 @@ export const DEF = {
   // of the card, or scanning it. We only ever keep the code's VALUE, never a photo: the image
   // is regenerated from `value` every time it's shown (lib/qr.js). `fmt` is the barcode symbology
   // ('qrcode' | 'ean13' | 'code128' | … — lower-cased BarcodeFormat) so it renders as the same
-  // kind of code the gym issued. Just data, so it syncs and backs up like everything else.
-  //   [{ id, label, value, fmt }]
+  // kind of code the gym issued; null means the card was entered manually and renders as text.
+  // `membershipPaid` is an ISO date (YYYY-MM-DD) of the last payment; `membershipCycle` is
+  // 'monthly' or 'yearly'. Both are optional — when set, a renewal-reminder pill appears on the
+  // card face. Just data, so it syncs and backs up like everything else.
+  //   [{ id, label, value, fmt, membershipPaid?, membershipCycle? }]
   gymCards: [],
   // The card the check-in screen last settled on, so it reopens where you left it (handy when
   // you have more than one gym). Holds a gymCards id, or null before any card exists / is chosen;

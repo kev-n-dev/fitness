@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { effectiveRoutines, effectiveRoutineIds, nextTrainingDay, streakWeeks, lastBW, setsDoneActive } from '../lib/history.js'
@@ -15,6 +15,162 @@ import { Button } from '../components/ui.jsx'
 import { tappable } from '../lib/use-sheet-keyboard.js'
 import { glyphOf } from '../lib/glyphs.js'
 import { dayNoteOf } from '../lib/day-notes.js'
+import { getCachedVitals, healthReadStatus, enableHealthRead } from '../lib/health-read.js'
+import { MOBILE } from '../lib/mobile.js'
+
+// Default daily water goal in ml — matches Nutrition.jsx DEFAULT_GOALS.water
+const DEFAULT_WATER_GOAL = 2500
+
+/** Format milliseconds as "7h 30m". */
+function fmtDuration(ms) {
+  if (!ms) return '–'
+  const h = Math.floor(ms / 3600000)
+  const m = Math.round((ms % 3600000) / 60000)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+// ── Dashboard sub-components ──────────────────────────────────────────────────
+
+/** Thin radial progress ring used in goal tiles. r=22, stroke=4 */
+function GoalRing({ pct, color = 'var(--acc)', size = 54 }) {
+  const r = 20, stroke = 4
+  const circ = 2 * Math.PI * r
+  const clamped = Math.min(100, Math.max(0, pct))
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx={24} cy={24} r={r} fill="none" stroke="var(--surface-2)" strokeWidth={stroke} />
+      <circle cx={24} cy={24} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={`${(clamped / 100) * circ} ${circ}`}
+        strokeLinecap="round"
+        style={{ transform: 'rotate(-90deg)', transformOrigin: '24px 24px', transition: 'stroke-dasharray .4s var(--ease)' }} />
+    </svg>
+  )
+}
+
+/** One tile inside the goals grid. */
+function GoalTile({ icon, label, value, sub, pct, color, onClick, children }) {
+  const ring = pct != null
+  return (
+    <div className={`goal-tile${onClick ? ' tappable' : ''}`}
+      style={{ cursor: onClick ? 'pointer' : 'default' }}
+      {...(onClick ? tappable(onClick) : {})}>
+      <div className="goal-tile-top">
+        {ring
+          ? <div className="goal-tile-ring"><GoalRing pct={pct} color={color} /><Icon name={icon} className="goal-tile-icon" style={{ color }} /></div>
+          : <span className="lrow-i" style={{ background: color + '26', color, fontSize: 18 }}><Icon name={icon} /></span>
+        }
+        <div className="goal-tile-vals">
+          <div className="goal-tile-val">{value}</div>
+          {sub && <div className="dim small" style={{ marginTop: 1 }}>{sub}</div>}
+        </div>
+      </div>
+      <div className="goal-tile-label">{label}</div>
+      {children}
+    </div>
+  )
+}
+
+/** Today's Health Connect activity strip (distance, calories, HR + extended clinical). */
+function HealthMonitorCard({ vitals, onNav }) {
+  if (!vitals) return null
+
+  // Core activity (always present if HC is connected)
+  const activity = [
+    { icon: 'figureRun', label: t('Distance'), value: ((vitals.distanceM || 0) / 1000).toFixed(1) + ' km', color: 'var(--teal)' },
+    { icon: 'flame',     label: t('Burned'),   value: (vitals.calories || 0) + ' kcal',                    color: 'var(--orange)' },
+  ]
+  if (vitals.avgBpm > 0) {
+    activity.push({ icon: 'heart', label: t('Avg HR'), value: vitals.avgBpm + ' bpm', color: 'var(--red)' })
+  }
+
+  // Extended clinical (only when wearable data exists)
+  const clinical = []
+  if (vitals.restingBpm > 0) clinical.push({ icon: 'heart',    label: t('Resting HR'), value: vitals.restingBpm + ' bpm', color: 'var(--red)' })
+  if (vitals.hrvMs      > 0) clinical.push({ icon: 'gauge',    label: t('HRV'),        value: vitals.hrvMs + ' ms',       color: 'var(--purple)' })
+  if (vitals.spo2       > 0) clinical.push({ icon: 'sparkles', label: t('SpO₂'),       value: vitals.spo2 + '%',          color: 'var(--blue)' })
+  if (vitals.respiratoryRate > 0) clinical.push({ icon: 'sunrise', label: t('Resp. rate'), value: vitals.respiratoryRate + '/min', color: 'var(--teal)' })
+  if (vitals.vo2Max     > 0) clinical.push({ icon: 'rocket',   label: t('VO₂ Max'),    value: vitals.vo2Max + ' ml/kg/min', color: 'var(--green)' })
+
+  const allItems = [...activity, ...clinical]
+
+  return (
+    <div className="card">
+      <div className="row between" style={{ marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: 17 }}>{t('Health monitors')}</h2>
+        <span className="dim small">{t('via Health Connect')}</span>
+      </div>
+
+      <div className="health-monitor-grid">
+        {allItems.map(item => (
+          <div key={item.label} className="health-monitor-tile">
+            <span className="lrow-i" style={{ background: item.color + '22', color: item.color, fontSize: 18, marginBottom: 6 }}>
+              <Icon name={item.icon} />
+            </span>
+            <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-.02em' }}>{item.value}</div>
+            <div className="dim small">{item.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* HR range sub-label */}
+      {vitals.minBpm > 0 && vitals.maxBpm > 0 && (
+        <div className="muted small" style={{ marginTop: 10, textAlign: 'center' }}>
+          {t('HR range')}: {vitals.minBpm}–{vitals.maxBpm} bpm
+        </div>
+      )}
+
+      {/* Irregular rhythm alert */}
+      {vitals.irregularRhythmAlert && (
+        <div className="row" style={{ gap: 7, marginTop: 10, color: 'var(--red)', fontSize: 13 }}>
+          <Icon name="warning" style={{ fontSize: 16 }} />
+          <span>{t('Irregular heart rhythm detected')}</span>
+        </div>
+      )}
+
+      <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+        <Button size="sm" variant="ghost" trailingIcon="chevronRight" onClick={() => onNav('/nutrition')}>
+          {t('Nutrition')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Sleep tile for the goals grid — shows last night's duration and stage breakdown. */
+function SleepTile({ sleep }) {
+  if (!sleep) return null
+  const { durationMs, stages = {} } = sleep
+  const deepMin  = Math.round((stages.deepMs  || 0) / 60000)
+  const remMin   = Math.round((stages.remMs   || 0) / 60000)
+  const goal = 8 * 3600000   // 8-hour target
+  return (
+    <GoalTile
+      icon="moon"
+      label={t('Sleep')}
+      value={fmtDuration(durationMs)}
+      sub={deepMin || remMin ? `${t('Deep')} ${deepMin}m · REM ${remMin}m` : t('Last night')}
+      pct={(durationMs / goal) * 100}
+      color="var(--indigo)"
+    />
+  )
+}
+
+/** Prompt to connect Health Connect when it isn't yet (Android only). */
+function ConnectHealthCard({ onConnect }) {
+  if (!MOBILE) return null
+  return (
+    <div className="card">
+      <div className="row" style={{ gap: 12 }}>
+        <span className="lrow-i" style={{ background: 'var(--green)26', color: 'var(--green)' }}><Icon name="heart" /></span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>{t('Health Connect')}</div>
+          <div className="muted small">{t('See steps, heart rate & calories on this screen')}</div>
+        </div>
+        <Button size="sm" variant="tinted" onClick={onConnect}>{t('Connect')}</Button>
+      </div>
+    </div>
+  )
+}
 
 // Home = what to do now + a quick glance. Deep charts & history live in Stats.
 export default function Home() {
@@ -24,6 +180,38 @@ export default function Home() {
   // The banner switched off and the sync stuck: a dot on the gear (Settings → Show connection status).
   const trouble = useConnectionTrouble()
   const [weekOffset, setWeekOffset] = useState(0)
+  const [vitals, setVitals] = useState(null)
+  const [hcStatus, setHcStatus] = useState(null)
+
+  // Load Health Connect vitals (cached read — no network call).
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    getCachedVitals().then(v => { if (v?.date === today) setVitals(v) }).catch(() => {})
+    healthReadStatus().then(setHcStatus).catch(() => {})
+  }, [])
+
+  const connectHealthRead = async () => {
+    const result = await enableHealthRead(data => { if (data?.vitals) setVitals(data.vitals) })
+    if (result.ok) setHcStatus(s => ({ ...s, on: true, granted: true }))
+  }
+
+  // ── Water tracking ──────────────────────────────────────────────────────────
+  const updateS = useStore(s => s.update)
+  const todayKey = todayISO()
+  const todayMeals = (S.meals || []).filter(m => m.time?.startsWith(todayKey))
+  const waterToday = Math.round(todayMeals.reduce((acc, m) => acc + (m.nutrition?.water || 0), 0))
+  const waterGoal = (S.nutritionGoals?.water) || DEFAULT_WATER_GOAL
+
+  const addWater = ml => {
+    updateS(s => {
+      s.meals = [...(s.meals || []), {
+        id: crypto.randomUUID(),
+        name: t('Water'),
+        time: new Date().toISOString(),
+        nutrition: { water: ml },
+      }]
+    })
+  }
 
   const today = new Date()
   // A weekday can hold several routines. `todayRoutines` is the whole day; `routine` is the
@@ -235,5 +423,92 @@ export default function Home() {
         <Icon name="calendar" className="chev" style={{ fontSize: 20 }} />
       </div>
     </div>
+
+    {/* ── Goals & trackers ─────────────────────────────────────────────────── */}
+    <h2 style={{ margin: '20px 2px 10px', fontSize: 20, fontWeight: 700, letterSpacing: '-.021em' }}>{t('Goals & trackers')}</h2>
+
+    <div className="goals-grid">
+      {/* Weekly workouts */}
+      {plannedPerWeek > 0 && (
+        <GoalTile
+          icon="dumbbell"
+          label={t('Weekly workouts')}
+          value={`${doneThisWeek} / ${plannedPerWeek}`}
+          sub={doneThisWeek >= plannedPerWeek ? t('Goal reached!') : t('{0} to go', plannedPerWeek - doneThisWeek)}
+          pct={(doneThisWeek / plannedPerWeek) * 100}
+          color="var(--acc)"
+          onClick={() => calendarSheet()}
+        />
+      )}
+
+      {/* Daily steps — only when Health Connect has today's data */}
+      {vitals && (
+        <GoalTile
+          icon="steps"
+          label={t('Steps today')}
+          value={(vitals.steps || 0).toLocaleString()}
+          sub={`${t('Goal')} ${(S.stepGoal || 10000).toLocaleString()}`}
+          pct={((vitals.steps || 0) / (S.stepGoal || 10000)) * 100}
+          color="var(--teal)"
+        />
+      )}
+
+      {/* Sleep — last night, from HC */}
+      {vitals?.sleep && <SleepTile sleep={vitals.sleep} />}
+
+      {/* Body weight goal */}
+      {S.showWeightCard !== false && S.targetW && bw && (
+        <GoalTile
+          icon="target"
+          label={t('Weight goal')}
+          value={`${fmtNum(bw.w)} ${S.unit}`}
+          sub={`${t('Goal')} ${fmtNum(S.targetW)} ${S.unit}`}
+          pct={(() => {
+            // oldest bw as start, targetW as end; clamp 0–100
+            const start = S.bodyweight.length > 1 ? S.bodyweight[0].w : bw.w
+            const range = Math.abs(S.targetW - start)
+            if (range === 0) return 100
+            const gone = Math.abs(bw.w - start)
+            return Math.min(100, (gone / range) * 100)
+          })()}
+          color="var(--yellow)"
+          onClick={goalSheet}
+        />
+      )}
+
+      {/* Water today */}
+      <GoalTile
+        icon="leaf"
+        label={t('Water')}
+        value={waterToday >= 1000 ? `${(waterToday / 1000).toFixed(1)} L` : `${waterToday} ml`}
+        sub={`${t('Goal')} ${waterGoal >= 1000 ? (waterGoal / 1000).toFixed(1) + ' L' : waterGoal + ' ml'}`}
+        pct={(waterToday / waterGoal) * 100}
+        color="var(--blue)"
+        onClick={() => nav('/nutrition')}
+      >
+        {/* Quick-add buttons inline in the tile */}
+        <div className="goal-tile-actions">
+          <button className="chip" style={{ fontSize: 12 }} onClick={e => { e.stopPropagation(); addWater(250) }}>+250 ml</button>
+          <button className="chip" style={{ fontSize: 12 }} onClick={e => { e.stopPropagation(); addWater(500) }}>+500 ml</button>
+        </div>
+      </GoalTile>
+
+      {/* Streak goal — always shown */}
+      <GoalTile
+        icon="flame"
+        label={t('Streak')}
+        value={t('{0} week streak', streakWeeks(S))}
+        sub={S.workouts.length ? tn('{0} workout total', '{0} workouts total', S.workouts.length) : t('Keep it up!')}
+        pct={Math.min(100, (streakWeeks(S) / Math.max(4, streakWeeks(S))) * 100)}
+        color="var(--orange)"
+        onClick={() => calendarSheet()}
+      />
+    </div>
+
+    {/* ── Health Connect monitors ──────────────────────────────────────────── */}
+    <HealthMonitorCard vitals={vitals} onNav={nav} />
+    {MOBILE && hcStatus && !hcStatus.on && !vitals && (
+      <ConnectHealthCard onConnect={connectHealthRead} />
+    )}
   </div>
 }

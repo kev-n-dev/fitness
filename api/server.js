@@ -1331,9 +1331,25 @@ const passwordRoutes = {
     json(res, 200, { user: publicUser(user) }, { 'Set-Cookie': sessionCookie(user) });
   },
 
+  // Change the profile's display name. No proof required beyond the session — the name is
+  // not a credential, just a label. Rejects if the new name is already in use.
+  'PATCH /api/account/name': async (req, res) => {
+    const s = sessionOf(req);
+    if (!s) return json(res, 401, { error: 'not signed in' });
+    const { user } = s;
+    const body = await readBody(req);
+    const name = text(body.name).trim().slice(0, 40);
+    if (!name) return json(res, 400, { error: 'name required', code: 'missing' });
+    if (name === user.name) return json(res, 200, { ok: true, name });
+    if (nameTaken(name, user.id)) return json(res, 409, { error: 'another profile already signs in with this name', code: 'name-taken' });
+    user.name = name;
+    saveDb();
+    audit(req, 'auth.name.change', { user });
+    json(res, 200, { ok: true, name });
+  },
+
   // What Settings shows: whether a password is set, and whether it could be removed.
   'GET /api/account/password': async (req, res) => {
-    const user = readSession(req);
     if (!user) return json(res, 401, { error: 'not signed in' });
     json(res, 200, {
       set: hasPassword(user), setAt: user.pw?.set || null, passkeys: passkeyCount(user),

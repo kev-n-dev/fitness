@@ -144,3 +144,95 @@ export function writtenIds(written = {}) {
   }
   return out
 }
+
+// ── Nutrition & hydration records ─────────────────────────────────────────────
+
+/**
+ * One NutritionRecord per logged meal that has at least one macro or calorie value.
+ * Meals with only water are handled by hydrationRecord instead.
+ * Returns null when the meal has no usable nutritional data.
+ */
+export function nutritionRecord(meal) {
+  const n = meal?.nutrition || {}
+  const hasData = ['calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'saturatedFat', 'sodium']
+    .some(k => n[k] != null && n[k] > 0)
+  if (!hasData) return null
+  const start = new Date(meal?.time || 0).getTime()
+  if (!meal?.id || !(start > 0)) return null
+  return {
+    id:          'opengym-meal-' + meal.id,
+    start,
+    end:         start + 60000,          // 1-minute window for an instantaneous log
+    name:        String(meal.name || '').trim().slice(0, 200) || null,
+    calories:     n.calories     ?? null,
+    protein:      n.protein      ?? null,
+    carbs:        n.carbs        ?? null,
+    fat:          n.fat          ?? null,
+    fiber:        n.fiber        ?? null,
+    sugar:        n.sugar        ?? null,
+    saturatedFat: n.saturatedFat ?? null,
+    sodium:       n.sodium       ?? null,  // mg — native side converts to grams
+  }
+}
+
+/**
+ * One HydrationRecord per meal entry that logged water (ml). Kept separate from
+ * nutritionRecord so Health Connect's own hydration view also sees it.
+ */
+export function hydrationRecord(meal) {
+  const water = meal?.nutrition?.water
+  if (!water || water <= 0) return null
+  const start = new Date(meal?.time || 0).getTime()
+  if (!meal?.id || !(start > 0)) return null
+  return {
+    id:       'opengym-water-' + meal.id,
+    start,
+    end:      start + 60000,
+    volumeMl: water,
+  }
+}
+
+/** All nutrition + hydration records built from S.meals. */
+export function nutritionRecords(S) {
+  const meals = S?.meals || []
+  return {
+    nutrition: meals.map(m => nutritionRecord(m)).filter(Boolean),
+    hydration: meals.map(m => hydrationRecord(m)).filter(Boolean),
+  }
+}
+
+/**
+ * Same shape as planSync but for nutrition + hydration records. Returns
+ * { nutrition, hydration, remove: { nutrition: [id], hydration: [id] }, writtenNutrition }
+ */
+export function planNutritionSync({ nutrition, hydration }, writtenNutrition = {}) {
+  const next = {}
+  const out = { nutrition: [], hydration: [], remove: { nutrition: [], hydration: [] } }
+  const take = (list, k, into) => {
+    for (const rec of list) {
+      if (next[rec.id]) continue
+      const h = recordKey(rec)
+      next[rec.id] = { k, h }
+      if (writtenNutrition[rec.id]?.h !== h) into.push(rec)
+    }
+  }
+  take(nutrition, 'nutrition', out.nutrition)
+  take(hydration, 'hydration', out.hydration)
+  for (const [id, was] of Object.entries(writtenNutrition || {})) {
+    if (next[id]) continue
+    if (was?.k === 'nutrition') out.remove.nutrition.push(id)
+    else if (was?.k === 'hydration') out.remove.hydration.push(id)
+  }
+  out.writtenNutrition = next
+  return out
+}
+
+/** Every nutrition / hydration record this phone wrote — used by disableHealth({ removeWritten }). */
+export function writtenNutritionIds(writtenNutrition = {}) {
+  const out = { nutrition: [], hydration: [] }
+  for (const [id, was] of Object.entries(writtenNutrition || {})) {
+    if (was?.k === 'nutrition') out.nutrition.push(id)
+    else if (was?.k === 'hydration') out.hydration.push(id)
+  }
+  return out
+}

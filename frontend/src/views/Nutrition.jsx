@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
 import { Button, Segmented } from '../components/ui.jsx'
 import FoodScanner from '../components/FoodScanner.jsx'
-import { getCachedVitals, healthReadStatus, enableHealthRead } from '../lib/health-read.js'
+import { getCachedVitals, healthReadStatus, enableHealthRead, getCachedHCNutrition } from '../lib/health-read.js'
 import { MOBILE } from '../lib/mobile.js'
 
 // ── Default goals ─────────────────────────────────────────────────────────────
@@ -293,12 +293,15 @@ export default function Nutrition() {
   const [tab, setTab] = useState('today')
   const [vitals, setVitals] = useState(null)
   const [hcStatus, setHcStatus] = useState(null)
+  const [hcNutrition, setHcNutrition] = useState(null)
+  const [showHCImport, setShowHCImport] = useState(true)
 
   useEffect(() => {
     getCachedVitals().then(v => {
       if (v?.date === new Date().toISOString().slice(0, 10)) setVitals(v)
     }).catch(() => {})
     healthReadStatus().then(setHcStatus).catch(() => {})
+    getCachedHCNutrition().then(n => { if (n) setHcNutrition(n) }).catch(() => {})
   }, [])
 
   const connectHealthRead = async () => {
@@ -323,7 +326,17 @@ export default function Nutrition() {
   const deleteMeal = id => { updateS(s => { s.meals = (s.meals || []).filter(m => m.id !== id) }) }
   const saveGoals = g => { updateS(s => { s.nutritionGoals = g }); setEditingGoals(false) }
 
-  const caloriesPct   = goals.calories > 0 ? Math.min(100, (totals.calories / goals.calories) * 100) : 0
+  // Merge HC nutrition from other apps when the user has opted in
+  const activeTotals = (() => {
+    if (!showHCImport || !hcNutrition) return totals
+    const merged = { ...totals }
+    for (const k of Object.keys(ZERO_TOTALS)) {
+      if (hcNutrition[k]) merged[k] = (merged[k] || 0) + hcNutrition[k]
+    }
+    return merged
+  })()
+
+  const caloriesPct   = goals.calories > 0 ? Math.min(100, (activeTotals.calories / goals.calories) * 100) : 0
   const caloriesColor = caloriesPct >= 100 ? 'var(--red)' : caloriesPct >= 80 ? 'var(--orange)' : 'var(--green)'
 
   const ringMacros = MACROS.filter(m => m.ring)
@@ -364,19 +377,45 @@ export default function Nutrition() {
           {vitals && <ActivityStrip vitals={vitals} />}
           {MOBILE && hcStatus && !hcStatus.on && <HealthConnectCard onConnect={connectHealthRead} />}
 
+          {/* Banner: HC nutrition from other apps is included */}
+          {hcNutrition && (hcNutrition.calories > 0 || hcNutrition.water > 0) && (
+            <div className="card" style={{ padding: '10px 14px' }}>
+              <div className="row between">
+                <div className="row" style={{ gap: 8 }}>
+                  <Icon name="heart" style={{ color: 'var(--green)', fontSize: 16 }} />
+                  <div className="small">
+                    <span style={{ fontWeight: 600 }}>Health Connect</span>
+                    <span className="muted"> · {showHCImport ? 'included in totals' : 'excluded from totals'}</span>
+                  </div>
+                </div>
+                <button className="chip" style={{ fontSize: 12 }} onClick={() => setShowHCImport(v => !v)}>
+                  {showHCImport ? 'Exclude' : 'Include'}
+                </button>
+              </div>
+              {showHCImport && (
+                <div className="dim small" style={{ marginTop: 6 }}>
+                  {[hcNutrition.calories && `${hcNutrition.calories} kcal`,
+                    hcNutrition.protein  && `${hcNutrition.protein}g protein`,
+                    hcNutrition.water    && `${hcNutrition.water >= 1000 ? (hcNutrition.water / 1000).toFixed(1) + 'L' : hcNutrition.water + 'ml'} water`]
+                    .filter(Boolean).join(' · ')}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Calorie bar */}
           <div className="card">
             <div className="row between" style={{ marginBottom: 8 }}>
               <div>
                 <div className="muted small">Calories</div>
                 <div style={{ fontSize: 30, fontWeight: 800, color: caloriesColor, lineHeight: 1.1 }}>
-                  {totals.calories}
+                  {activeTotals.calories}
                   <span className="muted" style={{ fontSize: 15, fontWeight: 400 }}> / {goals.calories} kcal</span>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div className="dim small">remaining</div>
-                <div style={{ fontWeight: 700 }}>{Math.max(0, goals.calories - totals.calories)}</div>
+                <div style={{ fontWeight: 700 }}>{Math.max(0, goals.calories - activeTotals.calories)}</div>
               </div>
             </div>
             <div style={{ height: 8, borderRadius: 4, background: 'var(--surface-2)', overflow: 'hidden' }}>
@@ -391,7 +430,7 @@ export default function Nutrition() {
               {ringMacros.map(m => (
                 <MacroRing
                   key={m.key}
-                  value={Math.round(totals[m.key])}
+                  value={Math.round(activeTotals[m.key])}
                   goal={goals[m.key]}
                   color={m.color}
                   label={m.label}
@@ -407,7 +446,7 @@ export default function Nutrition() {
             {barMacros.map(m => (
               <MacroBar
                 key={m.key}
-                value={Math.round(totals[m.key])}
+                value={Math.round(activeTotals[m.key])}
                 goal={goals[m.key]}
                 color={m.color}
                 label={m.label}

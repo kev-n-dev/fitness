@@ -2,15 +2,15 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
-import { uid } from '../lib/format.js'
+import { uid, todayISO, fmtDate } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
-import { canRenderFmt } from '../lib/qr.js'
+import { canRenderFmt, normalizeFmt } from '../lib/qr.js'
 import { scanCode, importCodeFromImage } from '../lib/scan.js'
 import { MOBILE } from '../lib/mobile.js'
 import Icon from '../components/Icon.jsx'
 import QrCanvas from '../components/QrCanvas.jsx'
 import CameraScan from '../components/CameraScan.jsx'
-import { Button, TextField } from '../components/ui.jsx'
+import { Button, TextField, Segmented } from '../components/ui.jsx'
 import { confirmSheet } from '../sheets.jsx'
 
 // Move the card at `from` to sit at index `to`, returning a new array (the input is left alone).
@@ -26,16 +26,42 @@ export function moveGymCard(cards, from, to) {
   return next
 }
 
+// Returns the ISO date string when the next payment is due, given the date of
+// the last payment and the billing cycle ('monthly' | 'yearly'). Returns null
+// when either argument is missing or the cycle is unrecognised.
+export function nextDueDate(paid, cycle) {
+  if (!paid || !cycle) return null
+  const [y, m, d] = paid.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  if (cycle === 'monthly') date.setMonth(date.getMonth() + 1)
+  else if (cycle === 'yearly') date.setFullYear(date.getFullYear() + 1)
+  else return null
+  return date.toISOString().slice(0, 10)
+}
+
+// Returns { due: 'YYYY-MM-DD', days: <integer> } or null. A negative `days`
+// value means the renewal is already overdue; zero means it falls today.
+export function paymentStatus(paid, cycle, today = todayISO()) {
+  const due = nextDueDate(paid, cycle)
+  if (!due) return null
+  const at = iso => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10))
+  const days = Math.round((at(due) - at(today)) / 86400000)
+  return { due, days }
+}
+
 // Gym check-in (reached from the Home "Check in" card; app and PWA alike). Shows each saved
 // membership code as a QR the turnstile can read, swiped through horizontally, with a trailing
 // "+" to add another. We only ever store the code's value + symbology; the QR is regenerated from
 // it here every time (see lib/qr.js), so nothing sensitive is kept as an image.
 //
+// Cards that have no barcode (gyms that only issue a member number) are stored with fmt = null
+// and shown as large text rather than a QR canvas — the same rail, same swipe, different face.
+//
 // The rail reopens on the card you used last (lastGymCardId) and remembers the one you settle on,
-// so a member with two gyms lands on the right code without swiping. Cards are added by scanning
-// or importing a photo only — never by typing a code, which is too easy to fat-finger into a
-// code that silently fails at the turnstile. An existing card can be edited (rename, re-scan), and
-// with more than one card each carries ◀ ▶ buttons to nudge its position along the rail.
+// so a member with two gyms lands on the right code without swiping. Cards are added by scanning,
+// importing a photo, or typing a member number. An existing card can be edited (rename, re-scan,
+// or switch to manual), and with more than one card each carries ◀ ▶ buttons to nudge its
+// position along the rail.
 export default function CheckIn() {
   const nav = useNavigate()
   const cards = useStore(s => s.S.gymCards) || []
@@ -102,11 +128,13 @@ export default function CheckIn() {
   </div>
 }
 
-// One saved card: its label centered above the QR, and the raw value underneath (handy when a
-// reader is fussy and a staff member types it in). The edit button opens the same sheet used to
-// add a card, pre-filled; the trash button removes it after a confirm. With more than one card, a
-// row of ◀ ▶ buttons nudges this card one slot along the rail — a plain, reliable reorder that
-// doesn't fight the rail's horizontal scroll the way a drag gesture did.
+// One saved card: its label centered above the QR (or member ID for manual cards), and the raw
+// barcode value underneath — handy when a reader is fussy and a staff member types it in (QR
+// cards only; manual-entry cards show the value large and don't repeat it small). The edit
+// button opens the same sheet used to add a card, pre-filled; the trash button removes it after
+// a confirm. With more than one card, a row of ◀ ▶ buttons nudges this card one slot along the
+// rail — a plain, reliable reorder that doesn't fight the rail's horizontal scroll the way a
+// drag gesture did. A payment-reminder pill appears at the bottom when a membership date is set.
 function CardFace({ card, index, count }) {
   const update = useStore(s => s.update)
   const remove = () => confirmSheet({
@@ -120,14 +148,34 @@ function CardFace({ card, index, count }) {
     }),
   })
   const move = to => update(s => { s.gymCards = moveGymCard(s.gymCards, index, to) })
+
+  // Payment reminder pill — shown below the card face when a date + cycle are saved.
+  const ps = paymentStatus(card.membershipPaid, card.membershipCycle)
+  let paymentPill = null
+  if (ps) {
+    const cls = ps.days < 0 ? 'overdue' : ps.days <= 7 ? 'soon' : 'ok'
+    const label = ps.days < 0
+      ? t('Overdue') + ' · ' + fmtDate(ps.due, false, true)
+      : ps.days === 0
+      ? t('Due today') + ' · ' + fmtDate(ps.due, false, true)
+      : t('Due') + ' ' + fmtDate(ps.due, true)
+    paymentPill = <div className={'ci-payment ' + cls}><Icon name="calendar" /><span>{label}</span></div>
+  }
+
   return <div className="ci-card">
     <div className="ci-card-hd">
       <button className="iconbtn ci-card-btn" onClick={() => openEditCard(card)} aria-label={t('Edit')}><Icon name="pencil" /></button>
       <div className="ci-label">{card.label}</div>
       <button className="iconbtn ci-card-btn" style={{ color: 'var(--red)' }} onClick={remove} aria-label={t('Remove')}><Icon name="trash" /></button>
     </div>
-    <div className="ci-qr-plate"><QrCanvas value={card.value} size={230} /></div>
-    <div className="ci-value">{card.value}</div>
+    {card.fmt
+      ? <>
+          <div className="ci-qr-plate"><QrCanvas value={card.value} size={230} /></div>
+          <div className="ci-value">{card.value}</div>
+        </>
+      : <div className="ci-member-plate"><span className="ci-member-id">{card.value}</span></div>
+    }
+    {paymentPill}
     {count > 1 && <div className="ci-reorder">
       <button className="iconbtn ci-card-btn" onClick={() => move(index - 1)} disabled={index === 0} aria-label={t('Move left')}><Icon name="chevronLeft" /></button>
       <span className="ci-pos">{index + 1} / {count}</span>
@@ -149,25 +197,45 @@ export function openEditCard(card) {
   useUI.getState().openSheet(close => <CardSheet close={close} card={card} />)
 }
 
-// Shared sheet for adding and editing a card. Without `card` it creates a new one; with `card` it
-// updates that entry in place. The code always comes from a scan or a photo — there is no text
-// field for it — so an edit that only renames keeps the existing scanned code untouched.
+// Shared sheet for adding and editing a card. Without `card` it creates a new one; with `card`
+// it updates that entry in place.
+//
+// Three ways to get a code into a card:
+//   1. Camera scan  — sets value + fmt ('qrcode'); card renders as QR canvas.
+//   2. Photo import — same path, reads the QR out of an image.
+//   3. Manual entry — user types a member number; fmt is left null, so the card renders as big
+//      text (no QR). Editing the text field after a scan also switches to manual mode.
+//
+// Payment fields (membershipPaid, membershipCycle) are optional. When set, a reminder pill
+// appears on the card face showing how many days until the next renewal.
 function CardSheet({ close, card }) {
   const editing = !!card
   const [label, setLabel] = useState(card?.label || '')
   const [value, setValue] = useState(card?.value || '')
+  // fmt tracks where the value came from: 'qrcode' for a scanned/imported code, null for
+  // a manually typed member number. Determines whether a QR canvas or text plate is shown.
+  const [fmt, setFmt] = useState(card?.fmt || null)
+  const [membershipPaid, setMembershipPaid] = useState(card?.membershipPaid || '')
+  const [membershipCycle, setMembershipCycle] = useState(card?.membershipCycle || 'monthly')
   const [busy, setBusy] = useState(false)
   const fileRef = useRef(null)
   const toast = useUI(s => s.toast)
 
   const commit = () => {
     const trimmed = value.trim()
-    if (!trimmed) { toast(t('Scan or import a code first')); return }
+    if (!trimmed) { toast(t('Enter a member ID, or scan your card')); return }
     const update = useStore.getState().update
+    const patch = {
+      label: label.trim() || t('Gym card'),
+      value: trimmed,
+      // Normalize the format token (e.g. 'QR_CODE' → 'qrcode') at commit time so it is
+      // always stored as the stable lower-case token regardless of how it was captured.
+      fmt: fmt ? (normalizeFmt(fmt) || 'qrcode') : null,
+      membershipPaid: membershipPaid || null,
+      membershipCycle: membershipPaid ? membershipCycle : null,
+    }
     if (editing) {
-      // The card can be removed on another device while this sheet is open. Checking inside the
-      // mutator returned from the MUTATOR, not from here, so the sheet still said "Card updated",
-      // closed, and pushed a write that changed nothing. Look first, and say what happened.
+      // The card can be removed on another device while this sheet is open.
       if (!(useStore.getState().S.gymCards || []).some(x => x.id === card.id)) {
         toast(t('That card was removed on another device'))
         close()
@@ -176,15 +244,14 @@ function CardSheet({ close, card }) {
       update(s => {
         const c = (s.gymCards || []).find(x => x.id === card.id)
         if (!c) return
-        c.label = label.trim() || t('Gym card')
-        c.value = trimmed
+        Object.assign(c, patch)
       })
       toast(t('Card updated'))
     } else {
       update(s => {
         if (!Array.isArray(s.gymCards)) s.gymCards = []
         const id = uid()
-        s.gymCards.push({ id, label: label.trim() || t('Gym card'), value: trimmed, fmt: 'qrcode' })
+        s.gymCards.push({ id, ...patch })
         s.lastGymCardId = id
       })
       toast(t('Card added'))
@@ -192,9 +259,7 @@ function CardSheet({ close, card }) {
     close()
   }
 
-  // Camera scan: in the app, hands off to the native scanner; in a browser, opens our own camera
-  // sheet on top of this one. Either way the value drops straight into the form so the user can
-  // still name it before saving.
+  // Camera scan path — sets fmt so the card renders as QR.
   const doScan = async () => {
     if (!MOBILE) {
       useUI.getState().openSheet(closeCam => <CameraScan
@@ -203,6 +268,7 @@ function CardSheet({ close, card }) {
           closeCam()
           if (!canRenderFmt(code.fmt)) { toast(t("That's not a QR code. Only QR cards can be shown here")); return }
           setValue(code.value)
+          setFmt(code.fmt || 'qrcode')
         }} />)
       return
     }
@@ -212,11 +278,13 @@ function CardSheet({ close, card }) {
       if (!code) return                       // user backed out
       if (!canRenderFmt(code.fmt)) { toast(t("That's not a QR code. Only QR cards can be shown here")); return }
       setValue(code.value)
+      setFmt(code.fmt || 'qrcode')
     } catch (e) {
       toast(scanErrorMessage(e))
     } finally { setBusy(false) }
   }
 
+  // Photo import path — same result as a scan.
   const onFile = async ev => {
     const file = ev.target.files && ev.target.files[0]
     ev.target.value = ''                       // let the same file be picked again later
@@ -227,26 +295,85 @@ function CardSheet({ close, card }) {
       if (!code) { toast(t('No QR code found in that image')); return }
       if (!canRenderFmt(code.fmt)) { toast(t("That's not a QR code. Only QR cards can be shown here")); return }
       setValue(code.value)
+      setFmt(code.fmt || 'qrcode')
     } catch (e) {
       toast(t('Could not read that image'))
     } finally { setBusy(false) }
   }
 
+  // Manual entry — clears fmt so the card renders as text rather than QR.
+  const onManualChange = e => {
+    setValue(e.target.value)
+    setFmt(null)
+  }
+
+  const CYCLE_OPTIONS = [
+    { value: 'monthly', label: t('Monthly') },
+    { value: 'yearly', label: t('Yearly') },
+  ]
+
   return <>
     <h3>{editing ? t('Edit card') : t('Add a card')}</h3>
-    <div className="muted small" style={{ marginBottom: 14 }}>{t('Scan it with the camera or import a photo.')}</div>
 
-    <div className="row" style={{ gap: 8, marginBottom: 16 }}>
+    {/* ── label ── */}
+    <label className="sect-t">{t('Label')}</label>
+    <TextField value={label} onChange={e => setLabel(e.target.value)} placeholder={t('e.g. FitZone downtown')} style={{ marginBottom: 16 }} />
+
+    {/* ── scan / import ── */}
+    <label className="sect-t">{t('Card code')}</label>
+    <div className="muted small" style={{ marginBottom: 10 }}>
+      {t('Scan or import your membership card. No QR card? Enter your member number below.')}
+    </div>
+    <div className="row" style={{ gap: 8, marginBottom: 12 }}>
       <Button variant="tinted" icon="camera" onClick={doScan} disabled={busy}>{editing ? t('Re-scan') : t('Scan')}</Button>
       <Button variant="tinted" icon="image" onClick={() => fileRef.current?.click()} disabled={busy}>{t('Import photo')}</Button>
     </div>
 
-    <label className="sect-t">{t('Label')}</label>
-    <TextField value={label} onChange={e => setLabel(e.target.value)} placeholder={t('e.g. FitZone downtown')} style={{ marginBottom: 16 }} />
+    {/* ── manual member ID ── */}
+    <TextField
+      value={value}
+      onChange={onManualChange}
+      placeholder={t('e.g. 1234567')}
+      style={{ marginBottom: 4 }}
+    />
+    <div className="muted small" style={{ marginBottom: 16 }}>
+      {t('Type your member number for gyms that don\'t have a scannable card.')}
+    </div>
 
-    {value.trim() && <div className="ci-qr-plate" style={{ alignSelf: 'center', marginBottom: 16 }}><QrCanvas value={value.trim()} size={150} /></div>}
+    {/* ── preview ── */}
+    {value.trim() && (fmt
+      ? <div className="ci-qr-plate" style={{ alignSelf: 'center', marginBottom: 16 }}><QrCanvas value={value.trim()} size={150} /></div>
+      : <div className="ci-member-plate" style={{ marginBottom: 16 }}><span className="ci-member-id">{value.trim()}</span></div>
+    )}
 
-    <Button variant="primary" onClick={commit} disabled={busy || !value.trim()}>{editing ? t('Save card') : t('Save card')}</Button>
+    {/* ── membership payment ── */}
+    <label className="sect-t">{t('Membership payment')}</label>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: membershipPaid ? 12 : 4 }}>
+      <span style={{ fontSize: 15 }}>{t('Last paid')}</span>
+      <input
+        type="date"
+        className="field"
+        value={membershipPaid}
+        max={todayISO()}
+        onChange={e => setMembershipPaid(e.target.value)}
+        style={{ width: 'auto' }}
+      />
+    </div>
+    {membershipPaid
+      ? <>
+          <label className="sect-t" style={{ marginTop: 4 }}>{t('Billing cycle')}</label>
+          <div style={{ marginBottom: 16 }}>
+            <Segmented options={CYCLE_OPTIONS} value={membershipCycle} onChange={setMembershipCycle} />
+          </div>
+        </>
+      : <div className="muted small" style={{ marginBottom: 16 }}>
+          {t('Set a payment date to get a renewal reminder on your card.')}
+        </div>
+    }
+
+    <Button variant="primary" onClick={commit} disabled={busy || !value.trim()}>
+      {editing ? t('Save card') : t('Save card')}
+    </Button>
 
     <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
   </>
