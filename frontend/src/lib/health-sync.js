@@ -176,3 +176,34 @@ export function initHealthSync(getState) {
   // also settles whether it is on, which the saves wait for (syncHealth).
   setTimeout(() => loadHealth().then(() => syncHealth(getState())).catch(() => {}), 3000)
 }
+
+// ── Health Connect read-side integration ────────────────────────────────────
+// Imported here so the same initHealthSync call wires up both sides.
+// Listeners registered via onVitalsChange receive { vitals, importedRuns }
+// whenever a refresh completes — the store subscribes to merge imported runs.
+import { refreshVitals, getCachedVitals, mergeImportedRuns } from './health-read.js'
+
+const vitalListeners = new Set()
+/** Subscribe to vitals updates. Returns an unsubscribe function. */
+export function onVitalsChange(cb) { vitalListeners.add(cb); return () => vitalListeners.delete(cb) }
+const toldVitals = v => vitalListeners.forEach(cb => { try { cb(v) } catch {} })
+
+/**
+ * Refresh Health Connect vitals and auto-import runs from other apps.
+ * Called on app foreground and once at launch (inside initHealthSync).
+ * getState / updateState come from the store so imported runs land in S.
+ */
+export async function syncVitals(getState, updateState) {
+  if (!MOBILE) return
+  const result = await refreshVitals(null).catch(() => null)
+  if (!result) return
+  // Merge any new runs from Google Fit / Strava / Garmin etc into S.runs
+  if (result.importedRuns?.length && updateState) {
+    const S = getState()
+    const merged = mergeImportedRuns(S.runs || [], result.importedRuns)
+    if (merged !== S.runs) {
+      updateState(s => { s.runs = merged })
+    }
+  }
+  toldVitals(result)
+}

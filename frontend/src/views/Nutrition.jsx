@@ -1,27 +1,61 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
 import { Button, Segmented } from '../components/ui.jsx'
+import { getCachedVitals, healthReadStatus, enableHealthRead, disableHealthRead } from '../lib/health-read.js'
+import { MOBILE } from '../lib/mobile.js'
 
-// ── Macro ring ───────────────────────────────────────────────────────────────
+// ── Health Connect activity strip ────────────────────────────────────────────
 
-function MacroRing({ value, goal, color, label, unit = 'g' }) {
-  const pct = goal > 0 ? Math.min(100, (value / goal) * 100) : 0
-  const r = 26, stroke = 5
-  const circ = 2 * Math.PI * r
-  const dash = (pct / 100) * circ
+function ActivityStrip({ vitals }) {
+  if (!vitals) return null
   return (
-    <div style={{ textAlign: 'center' }}>
-      <svg width={70} height={70} viewBox="0 0 70 70">
-        <circle cx={35} cy={35} r={r} fill="none" stroke="var(--surface-2)" strokeWidth={stroke} />
-        <circle cx={35} cy={35} r={r} fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
-          style={{ transform: 'rotate(-90deg)', transformOrigin: '35px 35px' }} />
-        <text x={35} y={39} textAnchor="middle" fontSize={12} fontWeight={700} fill="var(--label)">{value}</text>
-      </svg>
-      <div className="dim small">{label}</div>
-      <div style={{ fontSize: 10, color: 'var(--label-3)' }}>{goal}{unit} goal</div>
+    <div className="card">
+      <div className="muted small" style={{ marginBottom: 10 }}>
+        Activity today
+        <span className="dim small" style={{ marginLeft: 6 }}>via Health Connect</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>{(vitals.steps || 0).toLocaleString()}</div>
+          <div className="dim small">steps</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>{((vitals.distanceM || 0) / 1000).toFixed(1)}</div>
+          <div className="dim small">km</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--orange)' }}>{vitals.calories || 0}</div>
+          <div className="dim small">kcal burned</div>
+        </div>
+        {vitals.avgBpm > 0 && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--red)' }}>{vitals.avgBpm}</div>
+            <div className="dim small">avg bpm</div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Health Connect connect card ───────────────────────────────────────────────
+
+function HealthConnectCard({ onConnect }) {
+  if (!MOBILE) return null
+  return (
+    <div className="card">
+      <div className="row" style={{ gap: 12, marginBottom: 10 }}>
+        <span className="lrow-i" style={{ background: 'var(--green)' }}>
+          <Icon name="heart" />
+        </span>
+        <div>
+          <div style={{ fontWeight: 600 }}>Read from Health Connect</div>
+          <div className="muted small">Import steps, calories, and runs from Google Fit, Strava, Garmin &amp; more</div>
+        </div>
+      </div>
+      <Button variant="tinted" onClick={onConnect}>Connect</Button>
     </div>
   )
 }
@@ -112,9 +146,31 @@ function GoalsForm({ goals, onSave, onCancel }) {
   )
 }
 
-// ── Main view ────────────────────────────────────────────────────────────────
+// ── Macro ring ───────────────────────────────────────────────────────────────
+
+function MacroRing({ value, goal, color, label, unit = 'g' }) {
+  const pct = goal > 0 ? Math.min(100, (value / goal) * 100) : 0
+  const r = 26, stroke = 5
+  const circ = 2 * Math.PI * r
+  const dash = (pct / 100) * circ
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <svg width={70} height={70} viewBox="0 0 70 70">
+        <circle cx={35} cy={35} r={r} fill="none" stroke="var(--surface-2)" strokeWidth={stroke} />
+        <circle cx={35} cy={35} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+          style={{ transform: 'rotate(-90deg)', transformOrigin: '35px 35px' }} />
+        <text x={35} y={39} textAnchor="middle" fontSize={12} fontWeight={700} fill="var(--label)">{value}</text>
+      </svg>
+      <div className="dim small">{label}</div>
+      <div style={{ fontSize: 10, color: 'var(--label-3)' }}>{goal}{unit} goal</div>
+    </div>
+  )
+}
 
 const todayKey = () => new Date().toISOString().slice(0, 10)
+
+// ── Main view ────────────────────────────────────────────────────────────────
 
 export default function Nutrition() {
   const nav = useNavigate()
@@ -123,6 +179,23 @@ export default function Nutrition() {
   const [adding, setAdding] = useState(false)
   const [editingGoals, setEditingGoals] = useState(false)
   const [tab, setTab] = useState('today') // 'today' | 'planner'
+  const [vitals, setVitals] = useState(null)
+  const [hcStatus, setHcStatus] = useState(null)
+
+  // Load Health Connect vitals on mount
+  useEffect(() => {
+    getCachedVitals().then(v => {
+      if (v?.date === new Date().toISOString().slice(0, 10)) setVitals(v)
+    }).catch(() => {})
+    healthReadStatus().then(setHcStatus).catch(() => {})
+  }, [])
+
+  const connectHealthRead = async () => {
+    const result = await enableHealthRead(data => {
+      if (data?.vitals) setVitals(data.vitals)
+    })
+    if (result.ok) setHcStatus(s => ({ ...s, on: true, granted: true }))
+  }
 
   const goals = S.nutritionGoals || { calories: 2000, protein: 150, carbs: 200, fat: 70 }
   const today = todayKey()
@@ -186,6 +259,12 @@ export default function Nutrition() {
 
       {tab === 'today' && !adding && !editingGoals && (
         <>
+          {/* Health Connect activity strip — shown when connected */}
+          {vitals && <ActivityStrip vitals={vitals} />}
+          {/* Connect card — shown when not yet connected on Android */}
+          {MOBILE && hcStatus && !hcStatus.on && (
+            <HealthConnectCard onConnect={connectHealthRead} />
+          )}
           {/* Calorie bar */}
           <div className="card">
             <div className="row between" style={{ marginBottom: 10 }}>

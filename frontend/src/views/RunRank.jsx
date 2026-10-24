@@ -4,6 +4,7 @@ import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
 import { runRankScore, runRankTier, runRankBreakdown, newRun, formatPace, formatDuration, RUN_MILESTONES, bestTimeForDistance } from '../lib/ranks/runRank.js'
+import { sourceLabel } from '../lib/health-read.js'
 import { RANK_TIERS } from '../lib/ranks/tiers.js'
 
 // ── Active run tracker ───────────────────────────────────────────────────────
@@ -154,9 +155,14 @@ export default function RunRank() {
                 <div className="row between">
                   <div>
                     <div className="ttl">{run.distanceKm.toFixed(2)} km</div>
-                    <div className="muted small">{run.date} · {formatDuration(run.durationSec)} · {formatPace(run.paceSecPerKm)}</div>
+                    <div className="muted small">
+                      {run.date} · {formatDuration(run.durationSec)} · {formatPace(run.paceSecPerKm)}
+                      {run.source && run.source !== 'health_connect' && (
+                        <span className="dim small"> · {sourceLabel(run.source)}</span>
+                      )}
+                    </div>
                   </div>
-                  <Icon name="bolt" style={{ color: 'var(--green)', fontSize: 20 }} />
+                  <Icon name="bolt" style={{ color: run.source ? 'var(--teal)' : 'var(--green)', fontSize: 20 }} />
                 </div>
               </div>
             ))

@@ -7,10 +7,17 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.contract.ActivityResultContract;
 import androidx.health.connect.client.HealthConnectClient;
 import androidx.health.connect.client.PermissionController;
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord;
+import androidx.health.connect.client.records.DistanceRecord;
 import androidx.health.connect.client.records.ExerciseSessionRecord;
+import androidx.health.connect.client.records.HeartRateRecord;
 import androidx.health.connect.client.records.Record;
+import androidx.health.connect.client.records.StepsRecord;
 import androidx.health.connect.client.records.WeightRecord;
 import androidx.health.connect.client.records.metadata.Metadata;
+import androidx.health.connect.client.request.ReadRecordsRequest;
+import androidx.health.connect.client.response.ReadRecordsResponse;
+import androidx.health.connect.client.time.TimeRangeFilter;
 import androidx.health.connect.client.units.Mass;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -64,9 +71,15 @@ import org.json.JSONObject;
 public class HealthConnectPlugin extends Plugin {
 
     private static final String PROVIDER = "com.google.android.apps.healthdata";
-    // The literal permission names, as declared in AndroidManifest.xml.
+    // Write permissions (existing)
     private static final String WRITE_EXERCISE = "android.permission.health.WRITE_EXERCISE";
-    private static final String WRITE_WEIGHT = "android.permission.health.WRITE_WEIGHT";
+    private static final String WRITE_WEIGHT   = "android.permission.health.WRITE_WEIGHT";
+    // Read permissions (new)
+    private static final String READ_STEPS    = "android.permission.health.READ_STEPS";
+    private static final String READ_DISTANCE = "android.permission.health.READ_DISTANCE";
+    private static final String READ_CALORIES = "android.permission.health.READ_ACTIVE_CALORIES_BURNED";
+    private static final String READ_HR       = "android.permission.health.READ_HEART_RATE";
+    private static final String READ_EXERCISE = "android.permission.health.READ_EXERCISE";
     // Health Connect takes at most this many records in one insert.
     private static final int CHUNK = 500;
 
@@ -81,6 +94,16 @@ public class HealthConnectPlugin extends Plugin {
         Set<String> p = new HashSet<>();
         p.add(WRITE_EXERCISE);
         p.add(WRITE_WEIGHT);
+        return p;
+    }
+
+    private static Set<String> readPermissions() {
+        Set<String> p = new HashSet<>();
+        p.add(READ_STEPS);
+        p.add(READ_DISTANCE);
+        p.add(READ_CALORIES);
+        p.add(READ_HR);
+        p.add(READ_EXERCISE);
         return p;
     }
 
@@ -221,6 +244,240 @@ public class HealthConnectPlugin extends Plugin {
             call.resolve();
         } catch (Exception e) {
             call.reject(e.getMessage(), "failed");
+        }
+    }
+
+    // ── Read permissions ──────────────────────────────────────────────────────────
+
+    /** { granted: bool } — whether all five read permissions are held. */
+    @PluginMethod
+    public void statusRead(PluginCall call) {
+        if (!"available".equals(sdkStatus())) {
+            JSObject r = new JSObject(); r.put("granted", false); call.resolve(r); return;
+        }
+        worker.execute(() -> {
+            try {
+                JSObject r = new JSObject();
+                r.put("granted", granted().containsAll(readPermissions()));
+                call.resolve(r);
+            } catch (Exception e) { call.reject(e.getMessage(), "failed"); }
+        });
+    }
+
+    /** Asks for READ_STEPS, READ_DISTANCE, READ_ACTIVE_CALORIES_BURNED, READ_HEART_RATE, READ_EXERCISE. */
+    @PluginMethod
+    public void requestReadPermissions(PluginCall call) {
+        if (!"available".equals(sdkStatus())) {
+            call.reject("Health Connect is not available", "unavailable"); return;
+        }
+        ActivityResultContract<Set<String>, Set<String>> contract =
+                PermissionController.createRequestPermissionResultContract(PROVIDER);
+        Intent intent = contract.createIntent(getContext(), readPermissions());
+        startActivityForResult(call, intent, "readPermissionsResult");
+    }
+
+    @ActivityCallback
+    private void readPermissionsResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        ActivityResultContract<Set<String>, Set<String>> contract =
+                PermissionController.createRequestPermissionResultContract(PROVIDER);
+        Set<String> got = contract.parseResult(result.getResultCode(), result.getData());
+        worker.execute(() -> {
+            try {
+                JSObject r = new JSObject();
+                r.put("granted", (got != null && got.containsAll(readPermissions()))
+                        || granted().containsAll(readPermissions()));
+                call.resolve(r);
+            } catch (Exception e) { call.reject(e.getMessage(), "failed"); }
+        });
+    }
+
+    // ── Read vitals ───────────────────────────────────────────────────────────────
+
+    /**
+     * Reads aggregated health data for a date range.
+     * Call: HC.readDaily({ startMs: long, endMs: long })
+     * Returns: { steps: long, distanceM: double, calories: double, avgBpm: int, minBpm: int, maxBpm: int }
+     *
+     * All fields default to 0 when no data is available (no wearable, no source app, etc).
+     * distanceM is in metres; calories is active (exercise) calories only.
+     */
+    @PluginMethod
+    public void readDaily(PluginCall call) {
+        if (!"available".equals(sdkStatus())) {
+            call.reject("Health Connect is not available", "unavailable"); return;
+        }
+        long startMs = call.getLong("startMs", todayStartMs());
+        long endMs   = call.getLong("endMs",   System.currentTimeMillis());
+        worker.execute(() -> {
+            try {
+                Instant start = Instant.ofEpochMilli(startMs);
+                Instant end   = Instant.ofEpochMilli(endMs);
+                TimeRangeFilter range = TimeRangeFilter.Companion.between(start, end);
+
+                long   steps    = sumSteps(range);
+                double distM    = sumDistance(range);
+                double calories = sumCalories(range);
+                int[]  hr       = avgHr(range);
+
+                JSObject r = new JSObject();
+                r.put("steps",    steps);
+                r.put("distanceM", distM);
+                r.put("calories", calories);
+                r.put("avgBpm",   hr[0]);
+                r.put("minBpm",   hr[1]);
+                r.put("maxBpm",   hr[2]);
+                call.resolve(r);
+            } catch (SecurityException e) {
+                call.reject(e.getMessage(), "permission");
+            } catch (Exception e) {
+                call.reject(e.getMessage(), "failed");
+            }
+        });
+    }
+
+    /**
+     * Reads exercise sessions (runs, walks, cycles…) logged by any app in the time range.
+     * Call: HC.readExerciseSessions({ startMs: long, endMs: long })
+     * Returns: { sessions: [{ id, startMs, endMs, type, title, distanceM, source }] }
+     *
+     * Only sessions with a meaningful distance (> 0) and duration (> 30 s) are included.
+     * `source` is the originating app's package name (e.g. "com.google.android.apps.fitness").
+     */
+    @PluginMethod
+    public void readExerciseSessions(PluginCall call) {
+        if (!"available".equals(sdkStatus())) {
+            call.reject("Health Connect is not available", "unavailable"); return;
+        }
+        long startMs = call.getLong("startMs", System.currentTimeMillis() - 90L * 86400000L);
+        long endMs   = call.getLong("endMs",   System.currentTimeMillis());
+        worker.execute(() -> {
+            try {
+                Instant start = Instant.ofEpochMilli(startMs);
+                Instant end   = Instant.ofEpochMilli(endMs);
+                TimeRangeFilter range = TimeRangeFilter.Companion.between(start, end);
+
+                ReadRecordsRequest<ExerciseSessionRecord> req = new ReadRecordsRequest<>(
+                        JvmClassMappingKt.getKotlinClass(ExerciseSessionRecord.class),
+                        range, Collections.emptySet(), false, 500, null);
+                @SuppressWarnings("unchecked")
+                ReadRecordsResponse<ExerciseSessionRecord> resp =
+                        (ReadRecordsResponse<ExerciseSessionRecord>) BuildersKt.runBlocking(
+                                EmptyCoroutineContext.INSTANCE,
+                                (scope, cont) -> client().readRecords(req, cont));
+
+                JSArray sessions = new JSArray();
+                for (ExerciseSessionRecord s : resp.getRecords()) {
+                    long dur = s.getEndTime().toEpochMilli() - s.getStartTime().toEpochMilli();
+                    if (dur < 30000) continue;  // skip < 30 s
+                    // Skip sessions openGym itself wrote (prefixed opengym-w-)
+                    String clientId = s.getMetadata().getClientRecordId();
+                    if (clientId != null && clientId.startsWith("opengym-w-")) continue;
+                    JSObject obj = new JSObject();
+                    obj.put("id",        s.getMetadata().getId());
+                    obj.put("startMs",   s.getStartTime().toEpochMilli());
+                    obj.put("endMs",     s.getEndTime().toEpochMilli());
+                    obj.put("type",      exerciseTypeName(s.getExerciseType()));
+                    obj.put("title",     s.getTitle() != null ? s.getTitle() : "");
+                    obj.put("source",    s.getMetadata().getDataOrigin().getPackageName());
+                    sessions.put(obj);
+                }
+                JSObject r = new JSObject();
+                r.put("sessions", sessions);
+                call.resolve(r);
+            } catch (SecurityException e) {
+                call.reject(e.getMessage(), "permission");
+            } catch (Exception e) {
+                call.reject(e.getMessage(), "failed");
+            }
+        });
+    }
+
+    // ── Read helpers ──────────────────────────────────────────────────────────────
+
+    private long sumSteps(TimeRangeFilter range) throws InterruptedException {
+        ReadRecordsRequest<StepsRecord> req = new ReadRecordsRequest<>(
+                JvmClassMappingKt.getKotlinClass(StepsRecord.class),
+                range, Collections.emptySet(), true, 1000, null);
+        @SuppressWarnings("unchecked")
+        ReadRecordsResponse<StepsRecord> resp = (ReadRecordsResponse<StepsRecord>)
+                BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE,
+                        (scope, cont) -> client().readRecords(req, cont));
+        long total = 0;
+        for (StepsRecord r : resp.getRecords()) total += r.getCount();
+        return total;
+    }
+
+    private double sumDistance(TimeRangeFilter range) throws InterruptedException {
+        ReadRecordsRequest<DistanceRecord> req = new ReadRecordsRequest<>(
+                JvmClassMappingKt.getKotlinClass(DistanceRecord.class),
+                range, Collections.emptySet(), true, 1000, null);
+        @SuppressWarnings("unchecked")
+        ReadRecordsResponse<DistanceRecord> resp = (ReadRecordsResponse<DistanceRecord>)
+                BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE,
+                        (scope, cont) -> client().readRecords(req, cont));
+        double total = 0;
+        for (DistanceRecord r : resp.getRecords()) total += r.getDistance().inMeters();
+        return total;
+    }
+
+    private double sumCalories(TimeRangeFilter range) throws InterruptedException {
+        ReadRecordsRequest<ActiveCaloriesBurnedRecord> req = new ReadRecordsRequest<>(
+                JvmClassMappingKt.getKotlinClass(ActiveCaloriesBurnedRecord.class),
+                range, Collections.emptySet(), true, 1000, null);
+        @SuppressWarnings("unchecked")
+        ReadRecordsResponse<ActiveCaloriesBurnedRecord> resp =
+                (ReadRecordsResponse<ActiveCaloriesBurnedRecord>) BuildersKt.runBlocking(
+                        EmptyCoroutineContext.INSTANCE,
+                        (scope, cont) -> client().readRecords(req, cont));
+        double total = 0;
+        for (ActiveCaloriesBurnedRecord r : resp.getRecords())
+            total += r.getEnergy().inCalories();
+        return total;
+    }
+
+    /** Returns [avgBpm, minBpm, maxBpm] — all 0 when no HR data. */
+    private int[] avgHr(TimeRangeFilter range) throws InterruptedException {
+        ReadRecordsRequest<HeartRateRecord> req = new ReadRecordsRequest<>(
+                JvmClassMappingKt.getKotlinClass(HeartRateRecord.class),
+                range, Collections.emptySet(), true, 1000, null);
+        @SuppressWarnings("unchecked")
+        ReadRecordsResponse<HeartRateRecord> resp = (ReadRecordsResponse<HeartRateRecord>)
+                BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE,
+                        (scope, cont) -> client().readRecords(req, cont));
+        long sum = 0, count = 0, minBpm = Long.MAX_VALUE, maxBpm = 0;
+        for (HeartRateRecord r : resp.getRecords()) {
+            for (HeartRateRecord.Sample s : r.getSamples()) {
+                long bpm = s.getBeatsPerMinute();
+                sum += bpm; count++;
+                if (bpm < minBpm) minBpm = bpm;
+                if (bpm > maxBpm) maxBpm = bpm;
+            }
+        }
+        if (count == 0) return new int[]{ 0, 0, 0 };
+        return new int[]{ (int)(sum / count), (int)minBpm, (int)maxBpm };
+    }
+
+    private static long todayStartMs() {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        c.set(java.util.Calendar.MINUTE, 0);
+        c.set(java.util.Calendar.SECOND, 0);
+        c.set(java.util.Calendar.MILLISECOND, 0);
+        return c.getTimeInMillis();
+    }
+
+    /** Human-readable type name for an ExerciseSessionRecord type constant. */
+    private static String exerciseTypeName(int type) {
+        switch (type) {
+            case ExerciseSessionRecord.EXERCISE_TYPE_RUNNING:          return "running";
+            case ExerciseSessionRecord.EXERCISE_TYPE_WALKING:          return "walking";
+            case ExerciseSessionRecord.EXERCISE_TYPE_BIKING:           return "biking";
+            case ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY:return "biking_stationary";
+            case ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL:    return "swimming";
+            case ExerciseSessionRecord.EXERCISE_TYPE_HIKING:           return "hiking";
+            case ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING:return "strength_training";
+            default:                                                    return "other";
         }
     }
 

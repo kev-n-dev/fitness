@@ -111,6 +111,16 @@
          openGym writes finished workouts and weigh-ins and reads nothing back. -->
     <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
     <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
+    <!-- Health Connect read — vitals, steps, imported runs (#new).
+         Requested separately when the user enables "Read from Health Connect".
+         openGym reads steps, distance, calories and heart rate from Health Connect
+         so other apps (Google Fit, Strava, Garmin, Samsung Health) can contribute
+         to RUN Rank, TERRITORY Rank, and the Nutrition calorie burn display. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
 
     <!-- Whether the Health Connect app is there, on Android 13 and lower. -->
     <queries>
