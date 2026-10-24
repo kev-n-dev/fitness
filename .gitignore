@@ -10,6 +10,8 @@ data/
 .env
 .env.local
 .env.*.local
+.env.local
+.env.*.local
 
 # Build output / deps
 frontend/dist/
