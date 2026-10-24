@@ -46,6 +46,15 @@ import CoachChat from './views/CoachChat.jsx'
 import Measurements from './views/Measurements.jsx'
 import CoachIntake from './views/CoachIntake.jsx'
 import CoachSetup from './views/CoachSetup.jsx'
+import Ranks from './views/Ranks.jsx'
+import RepRank from './views/RepRank.jsx'
+import RunRank from './views/RunRank.jsx'
+import RecipeRank from './views/RecipeRank.jsx'
+import TerritoryRank from './views/TerritoryRank.jsx'
+import Leaderboard from './views/Leaderboard.jsx'
+import Challenges from './views/Challenges.jsx'
+import Nutrition from './views/Nutrition.jsx'
+import UserProfile from './views/UserProfile.jsx'
 
 // last known scrollY per route, so back-navigation can put the page where it was
 const scrollPositions = new Map()
@@ -228,6 +237,16 @@ function Shell() {
               <Route path="/coach/proposal" element={<Navigate to="/coach" replace />} />
               <Route path="/coach/setup" element={<CoachSetup />} />
               <Route path="/admin" element={user?.admin ? <Admin /> : <Navigate to="/home" replace />} />
+              {/* ── New competitive & social features ── */}
+              <Route path="/ranks" element={<Ranks />} />
+              <Route path="/ranks/rep" element={<RepRank />} />
+              <Route path="/ranks/run" element={<RunRank />} />
+              <Route path="/ranks/recipe" element={<RecipeRank />} />
+              <Route path="/ranks/territory" element={<TerritoryRank />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/challenges" element={<Challenges />} />
+              <Route path="/nutrition" element={<Nutrition />} />
+              <Route path="/profile" element={<UserProfile />} />
               <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           )}
