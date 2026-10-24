@@ -164,10 +164,11 @@ const P = {
   // exercise settings: two sliders
   slider: <><path d="M4.4 7.4h9.2M17.8 7.4h1.8M4.4 16.6h1.8M10.4 16.6h9.2" /><circle cx="15.7" cy="7.4" r="2.1" /><circle cx="8.3" cy="16.6" r="2.1" /></>,
 
-  /* ---- new feature icons ---- */
+  /* ── new feature icons ---- */
   leaf: <path d="M12 20.4c0 0-8.4-4.4-8.4-11.4a8.4 8.4 0 0 1 16.8 0c0 7-8.4 11.4-8.4 11.4ZM12 9v11.4M7.8 12.6a4.2 4.2 0 0 1 4.2-4.2" />,
   map: <><path d="M9 4.4 3.6 7.2v12.4l5.4-2.8 6 2.8 5.4-2.8V4.4l-5.4 2.8Z" /><path d="M9 4.4v12.4M15 7.2v12.4" /></>,
   stop: <rect x="5.8" y="5.8" width="12.4" height="12.4" rx="1.6" />,
+  barcode: <><path d="M4 6.4h1.6v11.2H4ZM6.6 6.4h.8v11.2h-.8ZM8.4 6.4h1.6v11.2H8.4ZM11 6.4h.8v11.2H11ZM12.8 6.4h2.4v11.2h-2.4ZM16.2 6.4h.8v11.2h-.8ZM18 6.4h2v11.2h-2Z" /></>,
 
   /* ---- v1.3.11 icon sweep: the meanings shuffle, pause and friends used to share ---- */
   // the Compact layout: four tight rows, where `list` has three with bullets

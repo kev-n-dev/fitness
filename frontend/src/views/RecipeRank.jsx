@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
+import FoodScanner from '../components/FoodScanner.jsx'
 import { recipeRankScore, recipeRankTier, recipeRankBreakdown, newRecipe, RECIPE_RANK_HOW } from '../lib/ranks/recipeRank.js'
 import { RANK_TIERS } from '../lib/ranks/tiers.js'
 
@@ -45,46 +46,115 @@ function RecipeCard({ recipe, onSelect }) {
 
 function RecipeForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '')
-  const [calories, setCalories] = useState(initial?.nutrition?.calories ?? '')
-  const [protein, setProtein] = useState(initial?.nutrition?.protein ?? '')
-  const [carbs, setCarbs] = useState(initial?.nutrition?.carbs ?? '')
-  const [fat, setFat] = useState(initial?.nutrition?.fat ?? '')
+  const [ingredients, setIngredients] = useState(initial?.ingredients || [])
+  const [scanningIngredient, setScanningIngredient] = useState(false)
+  const [nutrition, setNutrition] = useState({
+    calories:     initial?.nutrition?.calories     ?? '',
+    protein:      initial?.nutrition?.protein      ?? '',
+    carbs:        initial?.nutrition?.carbs        ?? '',
+    fat:          initial?.nutrition?.fat          ?? '',
+    fiber:        initial?.nutrition?.fiber        ?? '',
+    sugar:        initial?.nutrition?.sugar        ?? '',
+    saturatedFat: initial?.nutrition?.saturatedFat ?? '',
+    sodium:       initial?.nutrition?.sodium       ?? '',
+  })
   const [tags, setTags] = useState(initial?.tags?.join(', ') || '')
   const [steps, setSteps] = useState(initial?.steps?.join('\n') || '')
 
+  const setN = key => e => setNutrition(prev => ({ ...prev, [key]: e.target.value }))
+  const num = v => v !== '' ? Number(v) : null
+
+  // When a scanned ingredient is added, auto-fill nutrition if the fields are still empty
+  const addScannedIngredient = ingredient => {
+    setIngredients(prev => [...prev, ingredient])
+    setNutrition(prev => {
+      const n = ingredient.per100g || {}
+      const ratio = (ingredient.amount || 100) / 100
+      const fill = (prevVal, raw) => (prevVal !== '' || raw == null) ? prevVal : String(Math.round(raw * ratio * 10) / 10)
+      return {
+        calories:     fill(prev.calories,     n.calories),
+        protein:      fill(prev.protein,      n.protein),
+        carbs:        fill(prev.carbs,        n.carbs),
+        fat:          fill(prev.fat,          n.fat),
+        fiber:        fill(prev.fiber,        n.fiber),
+        sugar:        fill(prev.sugar,        n.sugar),
+        saturatedFat: fill(prev.saturatedFat, n.saturatedFat),
+        sodium:       fill(prev.sodium,       n.sodium),
+      }
+    })
+    setScanningIngredient(false)
+  }
+
   const save = (publish = false) => {
     if (!name.trim()) return
-    const recipe = {
+    onSave({
       ...(initial || newRecipe({ name })),
       name: name.trim(),
+      ingredients,
       steps: steps.split('\n').map(s => s.trim()).filter(Boolean),
       tags: tags.split(',').map(t => t.trim()).filter(Boolean),
       nutrition: {
-        calories: calories !== '' ? Number(calories) : null,
-        protein:  protein  !== '' ? Number(protein)  : null,
-        carbs:    carbs    !== '' ? Number(carbs)     : null,
-        fat:      fat      !== '' ? Number(fat)       : null,
+        calories:     num(nutrition.calories),
+        protein:      num(nutrition.protein),
+        carbs:        num(nutrition.carbs),
+        fat:          num(nutrition.fat),
+        fiber:        num(nutrition.fiber),
+        sugar:        num(nutrition.sugar),
+        saturatedFat: num(nutrition.saturatedFat),
+        sodium:       num(nutrition.sodium),
         servings: 1,
       },
       published: publish || (initial?.published ?? false),
       updatedAt: Date.now(),
-    }
-    onSave(recipe)
+    })
   }
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <h3 style={{ margin: 0 }}>{initial ? 'Edit recipe' : 'New recipe'}</h3>
       <input className="input" placeholder="Recipe name" value={name} onChange={e => setName(e.target.value)} />
-      <div className="muted small" style={{ marginBottom: -4 }}>Nutrition per serving</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <input className="input" placeholder="Calories" type="number" value={calories} onChange={e => setCalories(e.target.value)} />
-        <input className="input" placeholder="Protein (g)" type="number" value={protein} onChange={e => setProtein(e.target.value)} />
-        <input className="input" placeholder="Carbs (g)" type="number" value={carbs} onChange={e => setCarbs(e.target.value)} />
-        <input className="input" placeholder="Fat (g)" type="number" value={fat} onChange={e => setFat(e.target.value)} />
+
+      {/* Ingredients */}
+      <div>
+        <div className="row between" style={{ marginBottom: 8 }}>
+          <span className="muted small">Ingredients</span>
+          <Button size="sm" icon="camera" onClick={() => setScanningIngredient(true)}>Scan</Button>
+        </div>
+        {scanningIngredient && (
+          <FoodScanner mode="ingredient" onAdd={addScannedIngredient} onCancel={() => setScanningIngredient(false)} />
+        )}
+        {ingredients.map(ing => (
+          <div key={ing.id} className="row between" style={{ padding: '6px 0', borderBottom: '0.5px solid var(--sep)' }}>
+            <div>
+              <span className="small" style={{ fontWeight: 500 }}>{ing.name}</span>
+              <span className="dim small" style={{ marginLeft: 8 }}>{ing.amount}{ing.unit}</span>
+            </div>
+            <button className="iconbtn" onClick={() => setIngredients(p => p.filter(i => i.id !== ing.id))}
+              aria-label="Remove" style={{ fontSize: 14 }}>
+              <Icon name="xmark" />
+            </button>
+          </div>
+        ))}
       </div>
-      <textarea className="input" placeholder="Steps (one per line)" rows={4} value={steps} onChange={e => setSteps(e.target.value)} style={{ resize: 'vertical' }} />
-      <input className="input" placeholder="Tags (comma separated, e.g. high-protein, vegan)" value={tags} onChange={e => setTags(e.target.value)} />
+
+      {/* Nutrition per serving */}
+      <div className="muted small">Nutrition per serving</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <input className="input" placeholder="Calories (kcal)"    type="number" value={nutrition.calories}     onChange={setN('calories')} />
+        <input className="input" placeholder="Protein (g)"        type="number" value={nutrition.protein}      onChange={setN('protein')} />
+        <input className="input" placeholder="Carbs (g)"          type="number" value={nutrition.carbs}        onChange={setN('carbs')} />
+        <input className="input" placeholder="Fat (g)"            type="number" value={nutrition.fat}          onChange={setN('fat')} />
+        <input className="input" placeholder="Fiber (g)"          type="number" value={nutrition.fiber}        onChange={setN('fiber')} />
+        <input className="input" placeholder="Sugar (g)"          type="number" value={nutrition.sugar}        onChange={setN('sugar')} />
+        <input className="input" placeholder="Saturated fat (g)"  type="number" value={nutrition.saturatedFat} onChange={setN('saturatedFat')} />
+        <input className="input" placeholder="Sodium (mg)"        type="number" value={nutrition.sodium}       onChange={setN('sodium')} />
+      </div>
+
+      <textarea className="input" placeholder="Steps (one per line)" rows={4} value={steps}
+        onChange={e => setSteps(e.target.value)} style={{ resize: 'vertical' }} />
+      <input className="input" placeholder="Tags (comma separated, e.g. high-protein, vegan)"
+        value={tags} onChange={e => setTags(e.target.value)} />
+
       <div style={{ display: 'flex', gap: 8 }}>
         <Button variant="primary" onClick={() => save(false)} style={{ flex: 1 }}>Save draft</Button>
         <Button onClick={() => save(true)} style={{ flex: 1 }}>Publish</Button>

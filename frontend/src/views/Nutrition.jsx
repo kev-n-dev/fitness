@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
 import { Button, Segmented } from '../components/ui.jsx'
+import FoodScanner from '../components/FoodScanner.jsx'
 import { getCachedVitals, healthReadStatus, enableHealthRead } from '../lib/health-read.js'
 import { MOBILE } from '../lib/mobile.js'
 
@@ -287,6 +288,7 @@ export default function Nutrition() {
   const S = useStore(s => s.S)
   const updateS = useStore(s => s.update)
   const [adding, setAdding] = useState(false)
+  const [scanning, setScanning] = useState(false)
   const [editingGoals, setEditingGoals] = useState(false)
   const [tab, setTab] = useState('today')
   const [vitals, setVitals] = useState(null)
@@ -317,7 +319,7 @@ export default function Nutrition() {
     return acc
   }, { ...ZERO_TOTALS })
 
-  const addMeal  = meal => { updateS(s => { s.meals = [...(s.meals || []), meal] }); setAdding(false) }
+  const addMeal  = meal => { updateS(s => { s.meals = [...(s.meals || []), meal] }); setAdding(false); setScanning(false) }
   const deleteMeal = id => { updateS(s => { s.meals = (s.meals || []).filter(m => m.id !== id) }) }
   const saveGoals = g => { updateS(s => { s.nutritionGoals = g }); setEditingGoals(false) }
 
@@ -338,6 +340,9 @@ export default function Nutrition() {
           <button className="iconbtn" onClick={() => setEditingGoals(true)} aria-label="Edit goals">
             <Icon name="target" />
           </button>
+          <button className="iconbtn" onClick={() => setScanning(true)} aria-label="Scan food barcode">
+            <Icon name="camera" />
+          </button>
           <button className="iconbtn" onClick={() => setAdding(true)} aria-label="Log meal">
             <Icon name="plus" />
           </button>
@@ -351,6 +356,7 @@ export default function Nutrition() {
       />
 
       {editingGoals && <GoalsForm goals={goals} onSave={saveGoals} onCancel={() => setEditingGoals(false)} />}
+      {scanning && <FoodScanner mode="meal" onAdd={addMeal} onCancel={() => setScanning(false)} />}
       {adding && <QuickAddForm onAdd={addMeal} onCancel={() => setAdding(false)} />}
 
       {tab === 'today' && !adding && !editingGoals && (
@@ -415,7 +421,10 @@ export default function Nutrition() {
           <div className="card">
             <div className="row between" style={{ marginBottom: 10 }}>
               <h3 style={{ margin: 0 }}>Today's meals</h3>
-              <Button size="sm" icon="plus" onClick={() => setAdding(true)}>Add</Button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button size="sm" icon="camera" onClick={() => setScanning(true)}>Scan</Button>
+                <Button size="sm" icon="plus"   onClick={() => setAdding(true)}>Add</Button>
+              </div>
             </div>
             {meals.length === 0
               ? <div className="muted small" style={{ textAlign: 'center', padding: '16px 0' }}>No meals logged yet today.</div>
