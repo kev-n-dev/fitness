@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
-import { runRankScore, runRankTier, runRankBreakdown, newRun, formatPace, formatDuration } from '../lib/ranks/runRank.js'
+import { runRankScore, runRankTier, runRankBreakdown, newRun, formatPace, formatDuration, RUN_MILESTONES, bestTimeForDistance } from '../lib/ranks/runRank.js'
 import { RANK_TIERS } from '../lib/ranks/tiers.js'
 
 // ── Active run tracker ───────────────────────────────────────────────────────
@@ -183,20 +183,56 @@ export default function RunRank() {
               </div>
             )}
           </div>
+
+          {/* Distance score */}
           <div className="card">
-            <h3 style={{ margin: '0 0 16px' }}>Score breakdown</h3>
-            {Object.values(breakdown).map(item => (
-              <div key={item.label} style={{ marginBottom: 14 }}>
-                <div className="row between" style={{ marginBottom: 5 }}>
-                  <span className="small" style={{ fontWeight: 500 }}>{item.label}</span>
-                  <span className="small muted">{item.score.toLocaleString()} / {item.max.toLocaleString()}</span>
-                </div>
-                <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, (item.score / item.max) * 100)}%`, background: 'var(--green)', borderRadius: 3 }} />
-                </div>
-              </div>
-            ))}
+            <div className="row between">
+              <span style={{ fontWeight: 600 }}>Total distance</span>
+              <span style={{ fontWeight: 700, color: 'var(--green)' }}>{breakdown.distance.score.toLocaleString()} pts</span>
+            </div>
+            <div className="muted small" style={{ marginTop: 4 }}>{breakdown.distance.detail} · 2 pts per km, no cap</div>
           </div>
+
+          {/* Milestone PRs */}
+          <div className="card">
+            <h3 style={{ margin: '0 0 14px' }}>Milestone times</h3>
+            {RUN_MILESTONES.map(m => {
+              const best = bestTimeForDistance(runs, m.distKm)
+              const item = breakdown.milestones.items.find(i => i.key === m.key)
+              const earned = item?.pts || 0
+              const max = m.brackets[0].pts
+              const pct = (earned / max) * 100
+              return (
+                <div key={m.key} style={{ marginBottom: 14 }}>
+                  <div className="row between" style={{ marginBottom: 4 }}>
+                    <span className="small" style={{ fontWeight: 600 }}>{m.label}</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <span className="small" style={{ fontWeight: 700, color: earned > 0 ? 'var(--green)' : 'var(--label-3)' }}>{earned} pts</span>
+                      <span className="dim small"> / {max}</span>
+                    </div>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden', marginBottom: 3 }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--green)', borderRadius: 3 }} />
+                  </div>
+                  <div className="row between">
+                    <span className="dim small">{item?.bracketLabel || 'Not yet run'}</span>
+                    {best && <span className="dim small">PR: {formatDuration(best)}</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Challenge bonus */}
+          {breakdown.challenges.score > 0 && (
+            <div className="card">
+              <div className="row between">
+                <span style={{ fontWeight: 600 }}>Challenge bonuses</span>
+                <span style={{ fontWeight: 700, color: 'var(--yellow)' }}>+{breakdown.challenges.score.toLocaleString()} pts</span>
+              </div>
+            </div>
+          )}
+
           <Button onClick={() => nav('/leaderboard?rank=run')} icon="chart">View RUN Leaderboard</Button>
         </>
       )}

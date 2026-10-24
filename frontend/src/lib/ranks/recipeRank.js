@@ -1,23 +1,85 @@
-// RECIPE Rank — scoring engine for nutrition community contribution.
+// RECIPE Rank — scoring engine for community recipe contribution.
 //
-// Points are awarded for:
-//   • Recipes created and published
-//   • Community ratings received (average × count)
-//   • Recipes saved by other users
-//   • Completeness of nutritional information
+// Score = ratingScore + savesScore + completenessBonus + challengeBonus
 //
-// This rank is intentionally separate from personal nutrition adherence,
-// which has its own scoring in nutritionScore.js.
+// ── ratingScore (primary driver) ─────────────────────────────────────────────
+//   High ratings from the community are the main way to earn points.
+//   Only ratings at or above 4 stars contribute meaningfully:
+//
+//     4.0 stars: 25 pts per rating received
+//     4.5 stars: 37.5 pts per rating
+//     5.0 stars: 50 pts per rating
+//
+//   Formula: pts_per_rating = max(0, (avgRating - 3.0) * 25)
+//   A recipe rated below 3 stars earns nothing. Between 3 and 4 it earns
+//   a small amount. 4+ is where the real gains are.
+//   Cap: 10 000 pts (keeps the board meaningful as the community grows).
+//
+// ── savesScore ───────────────────────────────────────────────────────────────
+//   5 pts per save. Community saves signal utility independent of rating.
+//   Cap: 2 000 pts.
+//
+// ── completenessBonus ────────────────────────────────────────────────────────
+//   50 pts per published recipe with all four macros filled in.
+//   Rewards quality nutrition data, not just publishing. Cap: 500 pts.
+//
+// ── challengeBonus ───────────────────────────────────────────────────────────
+//   Flat bonus pts from completed challenges that apply to 'recipe' or 'all'.
+//
+// Note: publishing a recipe alone earns no base points. You earn by the
+// community engaging positively with what you create.
 import { tierForScore } from './tiers.js'
+import { challengeBonusFor } from './challengeBonus.js'
+
+// ── Score components ──────────────────────────────────────────────────────────
+
+/**
+ * Community rating score — the primary driver.
+ * pts_per_rating = max(0, (avgRating - 3.0) * 25)
+ * Total = sum over all published recipes of (ptsPerRating × ratingCount)
+ */
+function ratingScore(recipes) {
+  let score = 0
+  for (const r of recipes) {
+    if (!r.published || !r.ratingCount || r.ratingCount < 1) continue
+    const avg = r.avgRating || 0
+    const ptsPerRating = Math.max(0, (avg - 3.0) * 25)
+    score += ptsPerRating * r.ratingCount
+  }
+  return Math.min(10000, Math.floor(score))
+}
+
+/** 5 pts per save across all published recipes. Cap: 2 000. */
+function savesScore(recipes) {
+  const total = recipes.reduce((sum, r) => sum + (r.saves || 0), 0)
+  return Math.min(2000, total * 5)
+}
+
+/**
+ * 50 pts per published recipe with all four macros (calories, protein, carbs, fat).
+ * Cap: 500 pts.
+ */
+function completenessBonus(recipes) {
+  const complete = recipes.filter(r =>
+    r.published &&
+    r.nutrition?.calories != null &&
+    r.nutrition?.protein  != null &&
+    r.nutrition?.carbs    != null &&
+    r.nutrition?.fat      != null
+  )
+  return Math.min(500, complete.length * 50)
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
 
 export function recipeRankScore(S) {
   if (!S) return 0
   const recipes = S.recipes || []
   return (
-    creationScore(recipes) +
     ratingScore(recipes) +
     savesScore(recipes) +
-    nutritionCompletenessScore(recipes)
+    completenessBonus(recipes) +
+    challengeBonusFor(S, 'recipe')
   )
 }
 
@@ -25,70 +87,61 @@ export function recipeRankTier(score) {
   return tierForScore(score)
 }
 
-// ── Sub-scores ───────────────────────────────────────────────────────────────
-
-/** 50 pts per published recipe, capped at 2500. */
-function creationScore(recipes) {
-  const published = recipes.filter(r => r.published)
-  return Math.min(2500, published.length * 50)
-}
-
-/**
- * Rating score: sum of (avgRating × ratingCount) across all recipes.
- * Scale: a 5-star recipe with 100 ratings = 500 pts. Capped at 5000.
- */
-function ratingScore(recipes) {
-  let score = 0
-  for (const r of recipes) {
-    if (r.published && r.avgRating && r.ratingCount) {
-      score += r.avgRating * r.ratingCount
-    }
-  }
-  return Math.min(5000, Math.floor(score))
-}
-
-/** 10 pts per save across all published recipes, capped at 3000. */
-function savesScore(recipes) {
-  const totalSaves = recipes.reduce((sum, r) => sum + (r.saves || 0), 0)
-  return Math.min(3000, totalSaves * 10)
-}
-
-/**
- * Completeness bonus: 25 pts per recipe that has macros (calories, protein,
- * carbs, fat) fully filled in. Capped at 1000.
- */
-function nutritionCompletenessScore(recipes) {
-  const complete = recipes.filter(r =>
-    r.published &&
-    r.nutrition?.calories != null &&
-    r.nutrition?.protein != null &&
-    r.nutrition?.carbs != null &&
-    r.nutrition?.fat != null
-  )
-  return Math.min(1000, complete.length * 25)
-}
-
-// ── Breakdown ────────────────────────────────────────────────────────────────
-
 export function recipeRankBreakdown(S) {
   const recipes = S.recipes || []
+  const published = recipes.filter(r => r.published)
+  const totalRatings = published.reduce((s, r) => s + (r.ratingCount || 0), 0)
+  const totalSaves   = published.reduce((s, r) => s + (r.saves || 0), 0)
+  const bonus = challengeBonusFor(S, 'recipe')
+
   return {
-    creation:    { label: 'Recipes published',    score: creationScore(recipes),              max: 2500 },
-    ratings:     { label: 'Community ratings',    score: ratingScore(recipes),                max: 5000 },
-    saves:       { label: 'Recipe saves',         score: savesScore(recipes),                 max: 3000 },
-    completeness:{ label: 'Nutrition detail',     score: nutritionCompletenessScore(recipes), max: 1000 },
+    ratings: {
+      label: 'Community ratings',
+      score: ratingScore(recipes),
+      max: 10000,
+      detail: `${totalRatings} rating${totalRatings !== 1 ? 's' : ''} across ${published.length} recipe${published.length !== 1 ? 's' : ''}`,
+    },
+    saves: {
+      label: 'Recipe saves',
+      score: savesScore(recipes),
+      max: 2000,
+      detail: `${totalSaves} save${totalSaves !== 1 ? 's' : ''}`,
+    },
+    completeness: {
+      label: 'Full nutrition info',
+      score: completenessBonus(recipes),
+      max: 500,
+      detail: 'Recipes with all macros filled',
+    },
+    challenges: {
+      label: 'Challenge bonuses',
+      score: bonus,
+      max: null,
+    },
   }
 }
 
-// ── Recipe model helpers ─────────────────────────────────────────────────────
+// ── How-to guide (shown in the view) ─────────────────────────────────────────
+
+export const RECIPE_RANK_HOW = [
+  'Publish a recipe to make it rateable by the community',
+  'Higher average ratings earn more points — 4+ stars is where it counts',
+  'A 5-star recipe earns 50 pts per rating received',
+  'A 4-star recipe earns 25 pts per rating',
+  'Below 3 stars contributes nothing',
+  'Additional pts for saves and complete macro information',
+  'Complete challenges to earn bonus points',
+]
+
+// ── Recipe model helpers ──────────────────────────────────────────────────────
 
 /** Creates a new recipe object ready for state. */
 export function newRecipe({ name, ingredients = [], steps = [], nutrition = {}, tags = [] }) {
   return {
     id: crypto.randomUUID(),
     name,
-    ingredients, // [{ name, amount, unit }]
-    steps,       // ['Step text', ...]
+    ingredients,
+    steps,
     nutrition: {
       calories: nutrition.calories ?? null,
       protein:  nutrition.protein  ?? null,
@@ -96,7 +149,7 @@ export function newRecipe({ name, ingredients = [], steps = [], nutrition = {}, 
       fat:      nutrition.fat      ?? null,
       servings: nutrition.servings ?? 1,
     },
-    tags,         // ['high-protein', 'vegan', ...]
+    tags,
     published: false,
     avgRating: 0,
     ratingCount: 0,

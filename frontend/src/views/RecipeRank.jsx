@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
-import { recipeRankScore, recipeRankTier, recipeRankBreakdown, newRecipe } from '../lib/ranks/recipeRank.js'
+import { recipeRankScore, recipeRankTier, recipeRankBreakdown, newRecipe, RECIPE_RANK_HOW } from '../lib/ranks/recipeRank.js'
 import { RANK_TIERS } from '../lib/ranks/tiers.js'
 
 // ── Recipe card ──────────────────────────────────────────────────────────────
@@ -184,23 +184,27 @@ export default function RecipeRank() {
             <h3 style={{ margin: '0 0 16px' }}>Score breakdown</h3>
             {Object.values(breakdown).map(item => (
               <div key={item.label} style={{ marginBottom: 14 }}>
-                <div className="row between" style={{ marginBottom: 5 }}>
+                <div className="row between" style={{ marginBottom: 4 }}>
                   <span className="small" style={{ fontWeight: 500 }}>{item.label}</span>
-                  <span className="small muted">{item.score.toLocaleString()} / {item.max.toLocaleString()}</span>
+                  <div>
+                    <span className="small" style={{ fontWeight: 700 }}>{item.score.toLocaleString()}</span>
+                    {item.max != null && <span className="dim small"> / {item.max.toLocaleString()}</span>}
+                    <span className="dim small"> pts</span>
+                  </div>
                 </div>
-                <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, (item.score / item.max) * 100)}%`, background: 'var(--orange)', borderRadius: 3 }} />
-                </div>
+                {item.max != null && (
+                  <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden', marginBottom: 4 }}>
+                    <div style={{ height: '100%', width: `${Math.min(100, (item.score / item.max) * 100)}%`, background: 'var(--orange)', borderRadius: 3 }} />
+                  </div>
+                )}
+                {item.detail && <div className="dim small">{item.detail}</div>}
               </div>
             ))}
           </div>
           <div className="card">
             <h3 style={{ margin: '0 0 10px' }}>How RECIPE Rank works</h3>
-            <ul className="muted small" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
-              <li>50 pts per published recipe (max 2,500)</li>
-              <li>Points for community ratings and saves</li>
-              <li>25 pts bonus per recipe with full macros</li>
-              <li>Separate from your personal nutrition adherence score</li>
+            <ul className="muted small" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.9 }}>
+              {RECIPE_RANK_HOW.map((line, i) => <li key={i}>{line}</li>)}
             </ul>
           </div>
         </>

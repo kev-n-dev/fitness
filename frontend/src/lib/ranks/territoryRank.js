@@ -12,6 +12,7 @@
 //   • Each cell capture is stamped with a run or workout activity ID
 //   • Disputed cells (gained via flagged activities) are held in escrow
 import { tierForScore } from './tiers.js'
+import { challengeBonusFor } from './challengeBonus.js'
 
 export function territoryRankScore(S) {
   if (!S) return 0
@@ -19,7 +20,8 @@ export function territoryRankScore(S) {
   return (
     capturedCellScore(territory) +
     heldCellBonus(territory) +
-    diversityScore(territory)
+    diversityScore(territory) +
+    challengeBonusFor(S, 'territory')
   )
 }
 
@@ -55,9 +57,10 @@ function diversityScore(territory) {
 export function territoryRankBreakdown(S) {
   const territory = S.territory || {}
   return {
-    captured:  { label: 'Cells captured',   score: capturedCellScore(territory),  max: 10000 },
-    held:      { label: 'Territory held',   score: heldCellBonus(territory),      max: 5000  },
-    diversity: { label: 'Regions explored', score: diversityScore(territory),     max: 2000  },
+    captured:   { label: 'Cells captured',    score: capturedCellScore(territory),         max: 10000 },
+    held:       { label: 'Territory held',    score: heldCellBonus(territory),             max: 5000  },
+    diversity:  { label: 'Regions explored',  score: diversityScore(territory),            max: 2000  },
+    challenges: { label: 'Challenge bonuses', score: challengeBonusFor(S, 'territory'),    max: null  },
   }
 }
 

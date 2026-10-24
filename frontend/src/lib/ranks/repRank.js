@@ -11,6 +11,7 @@
 // against advanced lifters. Category is derived from total workout count
 // and estimated training age.
 import { tierForScore } from './tiers.js'
+import { challengeBonusFor } from './challengeBonus.js'
 
 // ── Category thresholds ──────────────────────────────────────────────────────
 
@@ -41,7 +42,8 @@ export function repRankScore(S) {
     consistencyScore(S) +
     volumeScore(S) +
     prScore(S) +
-    streakBonus(S)
+    streakBonus(S) +
+    challengeBonusFor(S, 'rep')
   )
 }
 
@@ -116,9 +118,10 @@ function streakBonus(S) {
 
 export function repRankBreakdown(S) {
   return {
-    consistency: { label: 'Workout consistency', score: consistencyScore(S), max: 2000 },
-    volume:      { label: 'Training volume',      score: volumeScore(S),      max: 5000 },
-    prs:         { label: 'Exercise breadth',     score: prScore(S),          max: 3000 },
-    streak:      { label: 'Weekly streak',        score: streakBonus(S),      max: 2000 },
+    consistency: { label: 'Workout consistency', score: consistencyScore(S),      max: 2000 },
+    volume:      { label: 'Training volume',      score: volumeScore(S),           max: 5000 },
+    prs:         { label: 'Exercise breadth',     score: prScore(S),               max: 3000 },
+    streak:      { label: 'Weekly streak',        score: streakBonus(S),           max: 2000 },
+    challenges:  { label: 'Challenge bonuses',    score: challengeBonusFor(S,'rep'), max: null },
   }
 }
