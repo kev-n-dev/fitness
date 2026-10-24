@@ -56,18 +56,22 @@ function savesScore(recipes) {
 }
 
 /**
- * 50 pts per published recipe with all four macros (calories, protein, carbs, fat).
+ * 50 pts per published recipe with all four primary macros (calories, protein, carbs, fat).
+ * Bonus 25 pts if secondary macros are also filled (fiber, sugar, saturatedFat, sodium).
  * Cap: 500 pts.
  */
 function completenessBonus(recipes) {
-  const complete = recipes.filter(r =>
-    r.published &&
-    r.nutrition?.calories != null &&
-    r.nutrition?.protein  != null &&
-    r.nutrition?.carbs    != null &&
-    r.nutrition?.fat      != null
-  )
-  return Math.min(500, complete.length * 50)
+  let score = 0
+  for (const r of recipes) {
+    if (!r.published) continue
+    const n = r.nutrition || {}
+    const hasPrimary = n.calories != null && n.protein != null && n.carbs != null && n.fat != null
+    if (!hasPrimary) continue
+    score += 50
+    const hasSecondary = n.fiber != null && n.sugar != null && n.saturatedFat != null && n.sodium != null
+    if (hasSecondary) score += 25
+  }
+  return Math.min(500, score)
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -143,11 +147,16 @@ export function newRecipe({ name, ingredients = [], steps = [], nutrition = {}, 
     ingredients,
     steps,
     nutrition: {
-      calories: nutrition.calories ?? null,
-      protein:  nutrition.protein  ?? null,
-      carbs:    nutrition.carbs    ?? null,
-      fat:      nutrition.fat      ?? null,
-      servings: nutrition.servings ?? 1,
+      calories:     nutrition.calories     ?? null,
+      protein:      nutrition.protein      ?? null,
+      carbs:        nutrition.carbs        ?? null,
+      fat:          nutrition.fat          ?? null,
+      fiber:        nutrition.fiber        ?? null,
+      sugar:        nutrition.sugar        ?? null,
+      saturatedFat: nutrition.saturatedFat ?? null,
+      sodium:       nutrition.sodium       ?? null,
+      water:        nutrition.water        ?? null,
+      servings:     nutrition.servings     ?? 1,
     },
     tags,
     published: false,

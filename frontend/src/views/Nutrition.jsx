@@ -3,35 +3,65 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
 import { Button, Segmented } from '../components/ui.jsx'
-import { getCachedVitals, healthReadStatus, enableHealthRead, disableHealthRead } from '../lib/health-read.js'
+import { getCachedVitals, healthReadStatus, enableHealthRead } from '../lib/health-read.js'
 import { MOBILE } from '../lib/mobile.js'
 
-// ── Health Connect activity strip ────────────────────────────────────────────
+// ── Default goals ─────────────────────────────────────────────────────────────
+// Based on general dietary reference values. Users set their own in Settings.
+
+export const DEFAULT_GOALS = {
+  calories:   2000,
+  protein:    150,   // g — higher end, suits active people
+  carbs:      200,   // g
+  fat:        70,    // g
+  fiber:      30,    // g  — 25–38 g/day recommended
+  sugar:      50,    // g  — max; WHO recommends < 50 g free sugar
+  saturatedFat: 20,  // g  — max; ~10% of 2000 kcal diet
+  sodium:     2300,  // mg — max; US dietary guidelines
+  water:      2500,  // ml — ~2.5 L
+}
+
+// ── Macro definitions (drives rendering everywhere) ───────────────────────────
+
+const MACROS = [
+  { key: 'protein',      label: 'Protein',       unit: 'g',  color: 'var(--blue)',   ring: true  },
+  { key: 'carbs',        label: 'Carbs',          unit: 'g',  color: 'var(--orange)', ring: true  },
+  { key: 'fat',          label: 'Fat',            unit: 'g',  color: 'var(--yellow)', ring: true  },
+  { key: 'fiber',        label: 'Fiber',          unit: 'g',  color: 'var(--green)',  ring: true  },
+  { key: 'sugar',        label: 'Sugar',          unit: 'g',  color: 'var(--pink)',   ring: true  },
+  { key: 'saturatedFat', label: 'Sat. fat',       unit: 'g',  color: 'var(--red)',    ring: true  },
+  { key: 'sodium',       label: 'Sodium',         unit: 'mg', color: 'var(--teal)',   ring: false },
+  { key: 'water',        label: 'Water',          unit: 'ml', color: 'var(--blue)',   ring: false },
+]
+
+const ZERO_TOTALS = Object.fromEntries([['calories', 0], ...MACROS.map(m => [m.key, 0])])
+
+// ── Health Connect activity strip ─────────────────────────────────────────────
 
 function ActivityStrip({ vitals }) {
   if (!vitals) return null
   return (
     <div className="card">
-      <div className="muted small" style={{ marginBottom: 10 }}>
-        Activity today
-        <span className="dim small" style={{ marginLeft: 6 }}>via Health Connect</span>
+      <div className="row between" style={{ marginBottom: 10 }}>
+        <span className="muted small">Activity today</span>
+        <span className="dim small">via Health Connect</span>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-around' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{(vitals.steps || 0).toLocaleString()}</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{(vitals.steps || 0).toLocaleString()}</div>
           <div className="dim small">steps</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{((vitals.distanceM || 0) / 1000).toFixed(1)}</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{((vitals.distanceM || 0) / 1000).toFixed(1)}</div>
           <div className="dim small">km</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--orange)' }}>{vitals.calories || 0}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--orange)' }}>{vitals.calories || 0}</div>
           <div className="dim small">kcal burned</div>
         </div>
         {vitals.avgBpm > 0 && (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--red)' }}>{vitals.avgBpm}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--red)' }}>{vitals.avgBpm}</div>
             <div className="dim small">avg bpm</div>
           </div>
         )}
@@ -40,19 +70,15 @@ function ActivityStrip({ vitals }) {
   )
 }
 
-// ── Health Connect connect card ───────────────────────────────────────────────
-
 function HealthConnectCard({ onConnect }) {
   if (!MOBILE) return null
   return (
     <div className="card">
       <div className="row" style={{ gap: 12, marginBottom: 10 }}>
-        <span className="lrow-i" style={{ background: 'var(--green)' }}>
-          <Icon name="heart" />
-        </span>
+        <span className="lrow-i" style={{ background: 'var(--green)' }}><Icon name="heart" /></span>
         <div>
           <div style={{ fontWeight: 600 }}>Read from Health Connect</div>
-          <div className="muted small">Import steps, calories, and runs from Google Fit, Strava, Garmin &amp; more</div>
+          <div className="muted small">Import steps, calories and runs from Google Fit, Strava, Garmin &amp; more</div>
         </div>
       </div>
       <Button variant="tinted" onClick={onConnect}>Connect</Button>
@@ -60,33 +86,50 @@ function HealthConnectCard({ onConnect }) {
   )
 }
 
-// ── Meal log entry ───────────────────────────────────────────────────────────
+// ── Meal log entry ────────────────────────────────────────────────────────────
 
 function MealRow({ meal, onDelete }) {
+  const n = meal.nutrition || {}
+  const parts = [
+    n.calories   != null ? `${n.calories} kcal`      : null,
+    n.protein    != null ? `${n.protein}g protein`    : null,
+    n.carbs      != null ? `${n.carbs}g carbs`        : null,
+    n.fat        != null ? `${n.fat}g fat`            : null,
+    n.fiber      != null ? `${n.fiber}g fiber`        : null,
+    n.sugar      != null ? `${n.sugar}g sugar`        : null,
+    n.saturatedFat != null ? `${n.saturatedFat}g sat` : null,
+    n.sodium     != null ? `${n.sodium}mg sodium`     : null,
+    n.water      != null ? `${n.water}ml water`       : null,
+  ].filter(Boolean)
+
   return (
-    <div className="row between" style={{ padding: '10px 0', borderBottom: '0.5px solid var(--sep)' }}>
-      <div>
+    <div style={{ padding: '10px 0', borderBottom: '0.5px solid var(--sep)' }}>
+      <div className="row between">
         <div style={{ fontWeight: 500 }}>{meal.name}</div>
-        <div className="muted small">
-          {meal.nutrition?.calories != null ? `${meal.nutrition.calories} kcal` : ''}
-          {meal.nutrition?.protein != null ? ` · ${meal.nutrition.protein}g protein` : ''}
-        </div>
+        <button className="iconbtn" onClick={() => onDelete(meal.id)} aria-label="Remove" style={{ fontSize: 16 }}>
+          <Icon name="trash" />
+        </button>
       </div>
-      <button className="iconbtn" onClick={() => onDelete(meal.id)} aria-label="Remove meal" style={{ fontSize: 16 }}>
-        <Icon name="trash" />
-      </button>
+      {parts.length > 0 && (
+        <div className="muted small" style={{ marginTop: 2, lineHeight: 1.6 }}>
+          {parts.join(' · ')}
+        </div>
+      )}
     </div>
   )
 }
 
-// ── Quick-add meal form ──────────────────────────────────────────────────────
+// ── Quick-add meal form ───────────────────────────────────────────────────────
+
+function num(v) { return v !== '' ? Number(v) : null }
 
 function QuickAddForm({ onAdd, onCancel }) {
   const [name, setName] = useState('')
-  const [calories, setCalories] = useState('')
-  const [protein, setProtein] = useState('')
-  const [carbs, setCarbs] = useState('')
-  const [fat, setFat] = useState('')
+  const [vals, setVals] = useState({
+    calories: '', protein: '', carbs: '', fat: '',
+    fiber: '', sugar: '', saturatedFat: '', sodium: '', water: '',
+  })
+  const set = key => e => setVals(v => ({ ...v, [key]: e.target.value }))
 
   const submit = () => {
     if (!name.trim()) return
@@ -95,10 +138,15 @@ function QuickAddForm({ onAdd, onCancel }) {
       name: name.trim(),
       time: new Date().toISOString(),
       nutrition: {
-        calories: calories !== '' ? Number(calories) : null,
-        protein:  protein  !== '' ? Number(protein)  : null,
-        carbs:    carbs    !== '' ? Number(carbs)     : null,
-        fat:      fat      !== '' ? Number(fat)       : null,
+        calories:     num(vals.calories),
+        protein:      num(vals.protein),
+        carbs:        num(vals.carbs),
+        fat:          num(vals.fat),
+        fiber:        num(vals.fiber),
+        sugar:        num(vals.sugar),
+        saturatedFat: num(vals.saturatedFat),
+        sodium:       num(vals.sodium),
+        water:        num(vals.water),
       },
     })
   }
@@ -107,12 +155,24 @@ function QuickAddForm({ onAdd, onCancel }) {
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <h3 style={{ margin: 0 }}>Log meal</h3>
       <input className="input" placeholder="Food name" value={name} onChange={e => setName(e.target.value)} autoFocus />
+
+      <div className="muted small">Primary macros</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <input className="input" placeholder="Calories" type="number" value={calories} onChange={e => setCalories(e.target.value)} />
-        <input className="input" placeholder="Protein (g)" type="number" value={protein} onChange={e => setProtein(e.target.value)} />
-        <input className="input" placeholder="Carbs (g)" type="number" value={carbs} onChange={e => setCarbs(e.target.value)} />
-        <input className="input" placeholder="Fat (g)" type="number" value={fat} onChange={e => setFat(e.target.value)} />
+        <input className="input" placeholder="Calories (kcal)" type="number" value={vals.calories}     onChange={set('calories')} />
+        <input className="input" placeholder="Protein (g)"     type="number" value={vals.protein}      onChange={set('protein')} />
+        <input className="input" placeholder="Carbs (g)"       type="number" value={vals.carbs}        onChange={set('carbs')} />
+        <input className="input" placeholder="Fat (g)"         type="number" value={vals.fat}          onChange={set('fat')} />
       </div>
+
+      <div className="muted small">Additional macros</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <input className="input" placeholder="Fiber (g)"         type="number" value={vals.fiber}        onChange={set('fiber')} />
+        <input className="input" placeholder="Sugar (g)"         type="number" value={vals.sugar}        onChange={set('sugar')} />
+        <input className="input" placeholder="Saturated fat (g)" type="number" value={vals.saturatedFat} onChange={set('saturatedFat')} />
+        <input className="input" placeholder="Sodium (mg)"       type="number" value={vals.sodium}       onChange={set('sodium')} />
+        <input className="input" placeholder="Water (ml)"        type="number" value={vals.water}        onChange={set('water')} />
+      </div>
+
       <div style={{ display: 'flex', gap: 8 }}>
         <Button variant="primary" onClick={submit} style={{ flex: 1 }}>Add</Button>
         <Button onClick={onCancel} style={{ flex: 1 }}>Cancel</Button>
@@ -121,56 +181,106 @@ function QuickAddForm({ onAdd, onCancel }) {
   )
 }
 
-// ── Goals form ───────────────────────────────────────────────────────────────
+// ── Goals form ────────────────────────────────────────────────────────────────
+
+function GoalInput({ label, value, onChange, unit }) {
+  return (
+    <div>
+      <div className="dim small" style={{ marginBottom: 4 }}>{label} ({unit})</div>
+      <input className="input" type="number" value={value} onChange={e => onChange(Number(e.target.value))} />
+    </div>
+  )
+}
 
 function GoalsForm({ goals, onSave, onCancel }) {
-  const [calories, setCalories] = useState(goals?.calories ?? 2000)
-  const [protein, setProtein] = useState(goals?.protein ?? 150)
-  const [carbs, setCarbs] = useState(goals?.carbs ?? 200)
-  const [fat, setFat] = useState(goals?.fat ?? 70)
+  const [g, setG] = useState({ ...DEFAULT_GOALS, ...goals })
+  const set = key => val => setG(prev => ({ ...prev, [key]: val }))
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <h3 style={{ margin: 0 }}>Daily nutrition goals</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <input className="input" placeholder="Calories" type="number" value={calories} onChange={e => setCalories(Number(e.target.value))} />
-        <input className="input" placeholder="Protein (g)" type="number" value={protein} onChange={e => setProtein(Number(e.target.value))} />
-        <input className="input" placeholder="Carbs (g)" type="number" value={carbs} onChange={e => setCarbs(Number(e.target.value))} />
-        <input className="input" placeholder="Fat (g)" type="number" value={fat} onChange={e => setFat(Number(e.target.value))} />
+
+      <div>
+        <div className="muted small" style={{ marginBottom: 8 }}>Calories</div>
+        <input className="input" type="number" placeholder="Calories (kcal)" value={g.calories}
+          onChange={e => setG(prev => ({ ...prev, calories: Number(e.target.value) }))} />
       </div>
+
+      <div className="muted small" style={{ marginBottom: -4 }}>Macronutrients</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <GoalInput label="Protein"   unit="g"  value={g.protein}   onChange={set('protein')} />
+        <GoalInput label="Carbs"     unit="g"  value={g.carbs}     onChange={set('carbs')} />
+        <GoalInput label="Fat"       unit="g"  value={g.fat}       onChange={set('fat')} />
+        <GoalInput label="Fiber"     unit="g"  value={g.fiber}     onChange={set('fiber')} />
+      </div>
+
+      <div className="muted small" style={{ marginBottom: -4 }}>Limits (max per day)</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <GoalInput label="Sugar"         unit="g"  value={g.sugar}        onChange={set('sugar')} />
+        <GoalInput label="Saturated fat" unit="g"  value={g.saturatedFat} onChange={set('saturatedFat')} />
+        <GoalInput label="Sodium"        unit="mg" value={g.sodium}       onChange={set('sodium')} />
+        <GoalInput label="Water"         unit="ml" value={g.water}        onChange={set('water')} />
+      </div>
+
       <div style={{ display: 'flex', gap: 8 }}>
-        <Button variant="primary" onClick={() => onSave({ calories, protein, carbs, fat })} style={{ flex: 1 }}>Save goals</Button>
+        <Button variant="primary" onClick={() => onSave(g)} style={{ flex: 1 }}>Save goals</Button>
         <Button onClick={onCancel} style={{ flex: 1 }}>Cancel</Button>
       </div>
     </div>
   )
 }
 
-// ── Macro ring ───────────────────────────────────────────────────────────────
+// ── Macro ring ────────────────────────────────────────────────────────────────
 
 function MacroRing({ value, goal, color, label, unit = 'g' }) {
   const pct = goal > 0 ? Math.min(100, (value / goal) * 100) : 0
   const r = 26, stroke = 5
   const circ = 2 * Math.PI * r
   const dash = (pct / 100) * circ
+  const displayVal = unit === 'mg' ? (value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value)
+                   : unit === 'ml' ? (value >= 1000 ? `${(value / 1000).toFixed(1)}L` : value)
+                   : value
   return (
-    <div style={{ textAlign: 'center' }}>
-      <svg width={70} height={70} viewBox="0 0 70 70">
+    <div style={{ textAlign: 'center', minWidth: 60 }}>
+      <svg width={64} height={64} viewBox="0 0 70 70">
         <circle cx={35} cy={35} r={r} fill="none" stroke="var(--surface-2)" strokeWidth={stroke} />
         <circle cx={35} cy={35} r={r} fill="none" stroke={color} strokeWidth={stroke}
           strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
           style={{ transform: 'rotate(-90deg)', transformOrigin: '35px 35px' }} />
-        <text x={35} y={39} textAnchor="middle" fontSize={12} fontWeight={700} fill="var(--label)">{value}</text>
+        <text x={35} y={39} textAnchor="middle" fontSize={11} fontWeight={700} fill="var(--label)">{displayVal}</text>
       </svg>
-      <div className="dim small">{label}</div>
-      <div style={{ fontSize: 10, color: 'var(--label-3)' }}>{goal}{unit} goal</div>
+      <div className="dim small" style={{ fontSize: 11 }}>{label}</div>
+      <div style={{ fontSize: 10, color: 'var(--label-3)' }}>{goal}{unit}</div>
     </div>
   )
 }
 
+// ── Linear progress bar (for sodium + water) ──────────────────────────────────
+
+function MacroBar({ value, goal, color, label, unit, isLimit = false }) {
+  const pct = goal > 0 ? Math.min(100, (value / goal) * 100) : 0
+  const over = pct >= 100
+  const barColor = isLimit && over ? 'var(--red)' : color
+  const displayVal = unit === 'mg' ? `${value.toLocaleString()} mg` : `${value} ml`
+  const displayGoal = unit === 'mg' ? `${goal.toLocaleString()} mg` : `${goal} ml`
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div className="row between" style={{ marginBottom: 5 }}>
+        <span className="small" style={{ fontWeight: 500 }}>{label}</span>
+        <span className="dim small">{displayVal} / {displayGoal}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 3, transition: 'width 0.5s var(--ease)' }} />
+      </div>
+    </div>
+  )
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 const todayKey = () => new Date().toISOString().slice(0, 10)
 
-// ── Main view ────────────────────────────────────────────────────────────────
+// ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function Nutrition() {
   const nav = useNavigate()
@@ -178,11 +288,10 @@ export default function Nutrition() {
   const updateS = useStore(s => s.update)
   const [adding, setAdding] = useState(false)
   const [editingGoals, setEditingGoals] = useState(false)
-  const [tab, setTab] = useState('today') // 'today' | 'planner'
+  const [tab, setTab] = useState('today')
   const [vitals, setVitals] = useState(null)
   const [hcStatus, setHcStatus] = useState(null)
 
-  // Load Health Connect vitals on mount
   useEffect(() => {
     getCachedVitals().then(v => {
       if (v?.date === new Date().toISOString().slice(0, 10)) setVitals(v)
@@ -191,41 +300,32 @@ export default function Nutrition() {
   }, [])
 
   const connectHealthRead = async () => {
-    const result = await enableHealthRead(data => {
-      if (data?.vitals) setVitals(data.vitals)
-    })
+    const result = await enableHealthRead(data => { if (data?.vitals) setVitals(data.vitals) })
     if (result.ok) setHcStatus(s => ({ ...s, on: true, granted: true }))
   }
 
-  const goals = S.nutritionGoals || { calories: 2000, protein: 150, carbs: 200, fat: 70 }
+  const goals = { ...DEFAULT_GOALS, ...(S.nutritionGoals || {}) }
   const today = todayKey()
   const meals = (S.meals || []).filter(m => m.time?.startsWith(today))
 
-  // Totals for today
+  // Sum every macro across today's meals
   const totals = meals.reduce((acc, m) => {
-    if (m.nutrition?.calories) acc.calories += m.nutrition.calories
-    if (m.nutrition?.protein)  acc.protein  += m.nutrition.protein
-    if (m.nutrition?.carbs)    acc.carbs    += m.nutrition.carbs
-    if (m.nutrition?.fat)      acc.fat      += m.nutrition.fat
+    const n = m.nutrition || {}
+    for (const key of Object.keys(acc)) {
+      if (n[key] != null) acc[key] += n[key]
+    }
     return acc
-  }, { calories: 0, protein: 0, carbs: 0, fat: 0 })
+  }, { ...ZERO_TOTALS })
 
-  const addMeal = meal => {
-    updateS(s => { s.meals = [...(s.meals || []), meal] })
-    setAdding(false)
-  }
+  const addMeal  = meal => { updateS(s => { s.meals = [...(s.meals || []), meal] }); setAdding(false) }
+  const deleteMeal = id => { updateS(s => { s.meals = (s.meals || []).filter(m => m.id !== id) }) }
+  const saveGoals = g => { updateS(s => { s.nutritionGoals = g }); setEditingGoals(false) }
 
-  const deleteMeal = id => {
-    updateS(s => { s.meals = (s.meals || []).filter(m => m.id !== id) })
-  }
-
-  const saveGoals = newGoals => {
-    updateS(s => { s.nutritionGoals = newGoals })
-    setEditingGoals(false)
-  }
-
-  const caloriesPct = goals.calories > 0 ? Math.min(100, (totals.calories / goals.calories) * 100) : 0
+  const caloriesPct   = goals.calories > 0 ? Math.min(100, (totals.calories / goals.calories) * 100) : 0
   const caloriesColor = caloriesPct >= 100 ? 'var(--red)' : caloriesPct >= 80 ? 'var(--orange)' : 'var(--green)'
+
+  const ringMacros = MACROS.filter(m => m.ring)
+  const barMacros  = MACROS.filter(m => !m.ring)
 
   return (
     <div className="narrow">
@@ -244,39 +344,33 @@ export default function Nutrition() {
         </div>
       </div>
 
-      {/* Tab switcher */}
       <Segmented
         options={[{ value: 'today', label: 'Today' }, { value: 'planner', label: 'Meal planner' }]}
         value={tab}
         onChange={setTab}
       />
 
-      {editingGoals && (
-        <GoalsForm goals={goals} onSave={saveGoals} onCancel={() => setEditingGoals(false)} />
-      )}
-
+      {editingGoals && <GoalsForm goals={goals} onSave={saveGoals} onCancel={() => setEditingGoals(false)} />}
       {adding && <QuickAddForm onAdd={addMeal} onCancel={() => setAdding(false)} />}
 
       {tab === 'today' && !adding && !editingGoals && (
         <>
-          {/* Health Connect activity strip — shown when connected */}
           {vitals && <ActivityStrip vitals={vitals} />}
-          {/* Connect card — shown when not yet connected on Android */}
-          {MOBILE && hcStatus && !hcStatus.on && (
-            <HealthConnectCard onConnect={connectHealthRead} />
-          )}
+          {MOBILE && hcStatus && !hcStatus.on && <HealthConnectCard onConnect={connectHealthRead} />}
+
           {/* Calorie bar */}
           <div className="card">
-            <div className="row between" style={{ marginBottom: 10 }}>
+            <div className="row between" style={{ marginBottom: 8 }}>
               <div>
-                <div className="muted small">Calories today</div>
-                <div style={{ fontSize: 32, fontWeight: 800, color: caloriesColor }}>
+                <div className="muted small">Calories</div>
+                <div style={{ fontSize: 30, fontWeight: 800, color: caloriesColor, lineHeight: 1.1 }}>
                   {totals.calories}
-                  <span className="muted" style={{ fontSize: 16, fontWeight: 400 }}> / {goals.calories}</span>
+                  <span className="muted" style={{ fontSize: 15, fontWeight: 400 }}> / {goals.calories} kcal</span>
                 </div>
               </div>
-              <div className="muted small" style={{ textAlign: 'right' }}>
-                {Math.max(0, goals.calories - totals.calories)} kcal remaining
+              <div style={{ textAlign: 'right' }}>
+                <div className="dim small">remaining</div>
+                <div style={{ fontWeight: 700 }}>{Math.max(0, goals.calories - totals.calories)}</div>
               </div>
             </div>
             <div style={{ height: 8, borderRadius: 4, background: 'var(--surface-2)', overflow: 'hidden' }}>
@@ -284,13 +378,37 @@ export default function Nutrition() {
             </div>
           </div>
 
-          {/* Macro rings */}
+          {/* Macro rings — protein, carbs, fat, fiber, sugar, sat fat */}
           <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-around' }}>
-              <MacroRing value={totals.protein} goal={goals.protein} color="var(--blue)"   label="Protein" />
-              <MacroRing value={totals.carbs}   goal={goals.carbs}   color="var(--orange)" label="Carbs"   />
-              <MacroRing value={totals.fat}      goal={goals.fat}     color="var(--yellow)" label="Fat"     />
+            <div className="muted small" style={{ marginBottom: 12 }}>Macros</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-around', gap: 8 }}>
+              {ringMacros.map(m => (
+                <MacroRing
+                  key={m.key}
+                  value={Math.round(totals[m.key])}
+                  goal={goals[m.key]}
+                  color={m.color}
+                  label={m.label}
+                  unit={m.unit}
+                />
+              ))}
             </div>
+          </div>
+
+          {/* Linear bars — sodium, water */}
+          <div className="card">
+            <div className="muted small" style={{ marginBottom: 12 }}>Hydration & minerals</div>
+            {barMacros.map(m => (
+              <MacroBar
+                key={m.key}
+                value={Math.round(totals[m.key])}
+                goal={goals[m.key]}
+                color={m.color}
+                label={m.label}
+                unit={m.unit}
+                isLimit={m.key === 'sodium'}
+              />
+            ))}
           </div>
 
           {/* Meal log */}
@@ -315,9 +433,7 @@ export default function Nutrition() {
               Meal planner lets you schedule meals from your recipe library.
             </div>
             <div style={{ marginTop: 16 }}>
-              <Button variant="primary" onClick={() => nav('/ranks/recipe')}>
-                Browse recipes
-              </Button>
+              <Button variant="primary" onClick={() => nav('/ranks/recipe')}>Browse recipes</Button>
             </div>
           </div>
         </div>
