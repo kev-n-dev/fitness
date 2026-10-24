@@ -1,0 +1,39 @@
+# Cloudflare Tunnel config — Option A (recommended)
+#
+# This file tells cloudflared how to route traffic from Cloudflare's network
+# to your Docker stack running locally.
+#
+# Setup steps — see docs/CLOUDFLARE.md for the full guide.
+#
+# 1. Install cloudflared on your server:
+#      curl -L https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg > /dev/null
+#      echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared jammy main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+#      sudo apt update && sudo apt install cloudflared
+#
+# 2. Authenticate:
+#      cloudflared tunnel login
+#
+# 3. Create a tunnel (once):
+#      cloudflared tunnel create fitness-app
+#    Copy the tunnel ID from the output.
+#
+# 4. Fill in your tunnel ID and domain below, then save as ~/.cloudflared/config.yml
+#
+# 5. Add the DNS record:
+#      cloudflared tunnel route dns <tunnel-id> fitness.yourdomain.com
+#
+# 6. Run:
+#      cloudflared tunnel run fitness-app
+#    Or as a service:
+#      sudo cloudflared service install
+#      sudo systemctl start cloudflared
+
+tunnel: <YOUR_TUNNEL_ID>
+credentials-file: /root/.cloudflared/<YOUR_TUNNEL_ID>.json
+
+ingress:
+  # Your app (nginx container) on port 8080
+  - hostname: fitness.yourdomain.com
+    service: http://localhost:8080
+  # Catch-all (required by cloudflared)
+  - service: http_status:404

@@ -1,0 +1,27 @@
+# Cloudflare Pages config — Option B (frontend on Pages CDN)
+#
+# Use this if you want the frontend deployed to Cloudflare's global CDN
+# while the backend runs on a VPS.
+#
+# Deploy command:
+#   npm run build && npx wrangler pages deploy dist --project-name=fitness-app
+#
+# Or connect your GitHub repo to Cloudflare Pages in the dashboard and set:
+#   Build command:  npm run build
+#   Build output:   dist
+#   Root directory: frontend
+
+name = "fitness-app"
+compatibility_date = "2024-01-01"
+
+[env.production]
+name = "fitness-app"
+
+# Pages project settings
+# Set these in the Cloudflare Pages dashboard under Settings → Environment variables:
+#
+#   VITE_API_BASE  = https://api.fitness.yourdomain.com
+#
+# The frontend makes API calls to /api/* — set VITE_API_BASE if your API lives
+# on a different subdomain from the frontend. If they share a domain (via a
+# Worker or a Cloudflare Rule routing /api/* to your VPS), leave it unset.
