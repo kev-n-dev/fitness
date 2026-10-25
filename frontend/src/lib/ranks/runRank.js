@@ -214,7 +214,7 @@ export function newRun({ distanceKm, durationSec, routePoints = [], date }) {
 
 /** Formats pace as mm:ss /km. */
 export function formatPace(secPerKm) {
-  if (!secPerKm || secPerKm <= 0) return '—'
+  if (!secPerKm || secPerKm <= 0) return '--'
   const mins = Math.floor(secPerKm / 60)
   const secs = secPerKm % 60
   return `${mins}:${String(secs).padStart(2, '0')} /km`

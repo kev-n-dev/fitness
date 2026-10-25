@@ -2688,7 +2688,20 @@ export const workoutDetailSheet = w => ui().openSheet(close => <WorkoutDetail w=
 /* ============================ calendar ============================ */
 function Calendar({ start, close }) {
   const st = useStore(s => s.S)
-  const [cur, setCur] = useState(() => { const d = start ? new Date(start) : new Date(); d.setDate(1); return d })
+  // Parse `start` as a local date (not UTC). new Date('YYYY-MM-DD') parses as UTC midnight,
+  // which in negative-offset timezones rolls back to the previous day and the calendar shows
+  // the wrong month. Splitting the parts and using the Date(y,m,d) constructor keeps it local.
+  const [cur, setCur] = useState(() => {
+    let d
+    if (start) {
+      const [y, m, day] = String(start).split('-').map(Number)
+      d = new Date(y, m - 1, day)
+    } else {
+      d = new Date()
+    }
+    d.setDate(1)
+    return d
+  })
   const y = cur.getFullYear(), mo = cur.getMonth()
   const byDay = {}
   st.workouts.forEach(w => {

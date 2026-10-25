@@ -40,6 +40,8 @@ const LABELS = {
   'auth.email.change': 'Changed their sign-in e-mail',
   'auth.email.remove': 'Removed their sign-in e-mail',
   'auth.email.fail': 'Changing the sign-in e-mail failed',
+  // Profile display name change (PATCH /api/account/name).
+  'auth.name.change': 'Changed their display name',
   // More than one passkey, and one-time codes for another device (#95). `msg` on an addition or a
   // code is the proof it was made with (passkey, password); on a removal or a redemption, the
   // passkey's name.

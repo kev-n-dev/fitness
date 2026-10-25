@@ -133,7 +133,7 @@ export default function RunRank() {
               </div>
               <div>
                 <div style={{ fontSize: 36, fontWeight: 800 }}>
-                  {tracker.elapsed > 0 && tracker.distance > 0.01 ? formatPace(Math.round(tracker.elapsed / tracker.distance)) : '—'}
+                  {tracker.elapsed > 0 && tracker.distance > 0.01 ? formatPace(Math.round(tracker.elapsed / tracker.distance)) : '--'}
                 </div>
                 <div className="muted small">pace</div>
               </div>

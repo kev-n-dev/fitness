@@ -31,7 +31,7 @@ function RecipeCard({ recipe, onSelect }) {
         <div style={{ textAlign: 'right', marginLeft: 12 }}>
           {recipe.published && (
             <>
-              <div className="small" style={{ fontWeight: 600 }}>★ {recipe.avgRating?.toFixed(1) || '—'}</div>
+              <div className="small" style={{ fontWeight: 600 }}>★ {recipe.avgRating?.toFixed(1) || '--'}</div>
               <div className="dim small">{recipe.saves || 0} saves</div>
             </>
           )}
