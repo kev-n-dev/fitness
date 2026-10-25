@@ -1,0 +1,21 @@
+# Cloudflare Workers deployment — deploys the React frontend as static assets
+# to the existing 'fitness' Worker on your account.
+#
+# Deploy command (run from this frontend/ directory):
+#   npx wrangler login          ← first time only, opens browser
+#   npm run build
+#   npx wrangler deploy
+#
+# Live at: https://fitness.kc-labs.workers.dev
+# Account: 987ae10a695c542653fd42b42216779c
+
+name            = "fitness"
+account_id      = "987ae10a695c542653fd42b42216779c"
+compatibility_date = "2024-09-23"
+
+# Static assets — the built React app
+[assets]
+directory               = "./dist"
+# Serve index.html for all unmatched paths (React router handles the rest)
+not_found_handling      = "single-page-application"
+html_handling           = "auto-trailing-slash"
