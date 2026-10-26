@@ -4,6 +4,7 @@ import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
 import pairRoutes from './routes/pair.js';
 import accountRoutes from './routes/account.js';
+import syncRoutes from './routes/sync.js';
 export { RestTimerDO } from './durable/rest-timer.js';
 
 const APP_ORIGINS = [
@@ -79,6 +80,7 @@ app.route('/', healthRoutes);
 app.route('/', authRoutes);
 app.route('/', pairRoutes);
 app.route('/', accountRoutes);
+app.route('/', syncRoutes);
 
 // ── Default export ────────────────────────────────────────────────────────────
 export default {
