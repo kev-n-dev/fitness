@@ -299,28 +299,28 @@ export const NUDGE_COPY = {
     "friendly": {
       "title": "Wszystko w porządku?",
       "lines": [
-        "Trening „{0}" wciąż czeka. Co się dzieje?",
-        "Dziś bez treningu „{0}"? Jutro nawet krótka sesja się liczy.",
-        "Ciężki dzień? Trening „{0}" poczeka. Jutro nowy start.",
-        "Hej, trening „{0}" dziś nie wyszedł. Wszystko dobrze?"
+        "Trening \u201e{0}\u201d wciąż czeka. Co się dzieje?",
+        "Dziś bez treningu \u201e{0}\u201d? Jutro nawet krótka sesja się liczy.",
+        "Ciężki dzień? Trening \u201e{0}\u201d poczeka. Jutro nowy start.",
+        "Hej, trening \u201e{0}\u201d dziś nie wyszedł. Wszystko dobrze?"
       ]
     },
     "guilt": {
       "title": "Tęsknię za tobą",
       "lines": [
-        "Trening „{0}" czekał na ciebie przy drzwiach cały wieczór. Właśnie na ciebie.",
+        "Trening \u201e{0}\u201d czekał na ciebie przy drzwiach cały wieczór. Właśnie na ciebie.",
         "Sztanga pytała dziś o ciebie. Nie wiedziałem, co powiedzieć.",
-        "Czy to przez coś, co powiedziałem? Trening „{0}" tęskni za tobą.",
+        "Czy to przez coś, co powiedziałem? Trening \u201e{0}\u201d tęskni za tobą.",
         "Zająłem ci miejsce na ławce. Wciąż jest puste."
       ]
     },
     "drill": {
       "title": "Baczność, rekrucie!",
       "lines": [
-        "Twoje postępy pakują walizki. Jutro „{0}", bez wymówek!",
-        "Trening „{0}" sam się nie zrobi, rekrucie. Ruszaj się!",
-        "Wymówki nie podnoszą ciężarów. Jutro meldujesz się na „{0}"!",
-        "Twoje mięśnie zgłosiły twoje zaginięcie. Stawić się na „{0}"!"
+        "Twoje postępy pakują walizki. Jutro \u201e{0}\u201d, bez wymówek!",
+        "Trening \u201e{0}\u201d sam się nie zrobi, rekrucie. Ruszaj się!",
+        "Wymówki nie podnoszą ciężarów. Jutro meldujesz się na \u201e{0}\u201d!",
+        "Twoje mięśnie zgłosiły twoje zaginięcie. Stawić się na \u201e{0}\u201d!"
       ]
     }
   },

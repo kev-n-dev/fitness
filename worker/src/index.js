@@ -5,6 +5,8 @@ import authRoutes from './routes/auth.js';
 import pairRoutes from './routes/pair.js';
 import accountRoutes from './routes/account.js';
 import syncRoutes from './routes/sync.js';
+import pushRoutes from './routes/push.js';
+import adminRoutes, { reminderTick } from './routes/admin.js';
 export { RestTimerDO } from './durable/rest-timer.js';
 
 const APP_ORIGINS = [
@@ -81,12 +83,14 @@ app.route('/', authRoutes);
 app.route('/', pairRoutes);
 app.route('/', accountRoutes);
 app.route('/', syncRoutes);
+app.route('/', pushRoutes);
+app.route('/', adminRoutes);
 
 // ── Default export ────────────────────────────────────────────────────────────
 export default {
   fetch: app.fetch,
 
   async scheduled(event, env, ctx) {
-    // reminderTick stub — full implementation in a later FEAT.
+    ctx.waitUntil(reminderTick(env, ctx));
   },
 };
