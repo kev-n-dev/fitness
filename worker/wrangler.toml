@@ -1,0 +1,65 @@
+name = "fitness"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+account_id = "987ae10a695c542653fd42b42216779c"
+workers_dev = true
+
+[vars]
+RP_ID = "fitness.kc-labs.workers.dev"
+ORIGIN = "https://fitness.kc-labs.workers.dev"
+RP_NAME = "openGym"
+SESSION_DAYS = "90"
+INVITE_ONLY = "false"
+ALLOW_GUEST = "true"
+PASSWORD_LOGIN = "false"
+FIRST_USER_ADMIN = "true"
+AUDIT_LOG = "true"
+AUDIT_MAX = "5000"
+AUDIT_DAYS = "90"
+AUDIT_IP = "off"
+MEDIA_UPLOADS = "true"
+MEDIA_QUOTA_MB = "200"
+MEDIA_IMAGE_MAX_MB = "2"
+MEDIA_GIF_MAX_MB = "8"
+MEDIA_VIDEO_MAX_MB = "40"
+MEDIA_VIDEO_MAX_SEC = "60"
+MEDIA_GC_GRACE_DAYS = "14"
+ADMIN_UIDS = ""
+VAPID_SUBJECT = "mailto:admin@example.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fitness"
+database_id = "REPLACE_WITH_CF_D1_ID"
+migrations_dir = "src/db/migrations"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "REPLACE_WITH_CF_KV_SESSIONS_ID"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "REPLACE_WITH_CF_KV_RATE_LIMITS_ID"
+
+[[kv_namespaces]]
+binding = "APP_CONFIG"
+id = "REPLACE_WITH_CF_KV_APP_CONFIG_ID"
+
+[[r2_buckets]]
+binding = "FITNESS_MEDIA"
+bucket_name = "fitness-media"
+
+[[queues.producers]]
+binding = "FITNESS_QUEUE"
+queue = "fitness-queue"
+
+[[durable_objects.bindings]]
+name = "REST_TIMERS"
+class_name = "RestTimerDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["RestTimerDO"]
+
+[triggers]
+crons = ["* * * * *"]

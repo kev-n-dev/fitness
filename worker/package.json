@@ -1,0 +1,18 @@
+{
+  "name": "fitness-worker",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "deploy:dry": "wrangler deploy --dry-run",
+    "dev": "wrangler dev",
+    "migrate": "wrangler d1 migrations apply fitness"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "@simplewebauthn/server": "^13.1.1"
+  },
+  "devDependencies": {
+    "wrangler": "^3.91.0"
+  }
+}
