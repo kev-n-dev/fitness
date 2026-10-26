@@ -7,6 +7,7 @@ import accountRoutes from './routes/account.js';
 import syncRoutes from './routes/sync.js';
 import pushRoutes from './routes/push.js';
 import adminRoutes, { reminderTick } from './routes/admin.js';
+import mediaRoutes from './routes/media.js';
 export { RestTimerDO } from './durable/rest-timer.js';
 
 const APP_ORIGINS = [
@@ -85,6 +86,7 @@ app.route('/', accountRoutes);
 app.route('/', syncRoutes);
 app.route('/', pushRoutes);
 app.route('/', adminRoutes);
+app.route('/', mediaRoutes);
 
 // ── Default export ────────────────────────────────────────────────────────────
 export default {

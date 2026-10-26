@@ -6,7 +6,8 @@
     "deploy": "wrangler deploy",
     "deploy:dry": "wrangler deploy --dry-run",
     "dev": "wrangler dev",
-    "migrate": "wrangler d1 migrations apply fitness"
+    "migrate:schema": "wrangler d1 migrations apply fitness",
+    "migrate": "node scripts/migrate-data.js"
   },
   "dependencies": {
     "hono": "^4.7.0",
