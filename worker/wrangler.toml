@@ -30,20 +30,20 @@ VAPID_SUBJECT = "mailto:admin@example.com"
 [[d1_databases]]
 binding = "DB"
 database_name = "fitness"
-database_id = "REPLACE_WITH_CF_D1_ID"
+database_id = "e6b83372-ef09-4a1c-8c5f-4f2c31afc27e"
 migrations_dir = "src/db/migrations"
 
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "REPLACE_WITH_CF_KV_SESSIONS_ID"
+id = "252fe91f40284bb8988ba4624e8fb29e"
 
 [[kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "REPLACE_WITH_CF_KV_RATE_LIMITS_ID"
+id = "c0e44dc88c2e44f0a97ec3ce342828dd"
 
 [[kv_namespaces]]
 binding = "APP_CONFIG"
-id = "REPLACE_WITH_CF_KV_APP_CONFIG_ID"
+id = "b41624b259374ec88e5df8142d8c3d83"
 
 [[r2_buckets]]
 binding = "FITNESS_MEDIA"

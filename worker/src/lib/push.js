@@ -118,9 +118,10 @@ async function encryptPayload(plaintext, p256dh, auth) {
   const senderPublicKeyBytes = new Uint8Array(senderPublicKeyRaw);
 
   // HKDF-SHA-256 key derivation (RFC 8291 Section 3.4)
-  // PRK = HKDF-Extract(auth_secret, ecdh_secret)
-  const hkdfPrkKey = await globalThis.crypto.subtle.importKey(
-    'raw', authSecret, 'HKDF', false, ['deriveBits']
+  // PRK = HKDF-Extract(salt=auth_secret, IKM=ecdh_secret)
+  // importKey takes the IKM (ecdh_secret); auth_secret is the salt in deriveBits.
+  const hkdfIkmKey = await globalThis.crypto.subtle.importKey(
+    'raw', sharedSecret, 'HKDF', false, ['deriveBits']
   );
 
   // ikm info: "WebPush: info\x00" || receiver_public || sender_public
@@ -130,8 +131,8 @@ async function encryptPayload(plaintext, p256dh, auth) {
     senderPublicKeyBytes
   );
   const ikmBits = await globalThis.crypto.subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt: sharedSecret, info: ikmInfo },
-    hkdfPrkKey, 256
+    { name: 'HKDF', hash: 'SHA-256', salt: authSecret, info: ikmInfo },
+    hkdfIkmKey, 256
   );
   const ikm = new Uint8Array(ikmBits);
 

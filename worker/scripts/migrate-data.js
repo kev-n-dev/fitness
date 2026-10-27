@@ -309,7 +309,7 @@ async function migrateAudit() {
     } catch { /* skip malformed lines */ }
   }
 
-  const SQL = `INSERT INTO audit_events
+  const SQL = `INSERT OR IGNORE INTO audit_events
     (ts,ev,ok,uid,name,tgt,tname,msg,act,ip)
     VALUES (?,?,?,?,?,?,?,?,?,?)`;
 

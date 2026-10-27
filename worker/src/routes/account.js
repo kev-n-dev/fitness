@@ -17,7 +17,7 @@ import { audit } from '../lib/audit.js';
 import { makeLinkCode, hashLinkCode } from '../lib/device-link.js';
 import { passkeyName, MAX_PASSKEYS } from '../lib/passkeys.js';
 import {
-  getUserById, updateUser, countUsers,
+  getUserById, getUserByName, getUserByEmail, updateUser, countUsers,
   getPasskeyById, getPasskeysByUser, createPasskey, updatePasskeyCounter,
   renamePasskey, deletePasskey,
   createDeviceLink, getDeviceLink, deleteDeviceLink, deleteDeviceLinksByUser,
@@ -580,7 +580,7 @@ app.patch('/api/account/name', async (c) => {
   if (name === user.name) return c.json({ ok: true, name });
 
   // Name must not be taken by another password-holding user
-  const { getUserByName: gbn } = await import('../db/queries.js');
+  const gbn = getUserByName;
   const other = await gbn(env.DB, nameKey(name));
   if (other && other.id !== user.id && other.pw_hash) {
     return c.json({ error: 'another profile already signs in with this name', code: 'name-taken' }, 409);
@@ -601,7 +601,7 @@ app.get('/api/account/password', async (c) => {
   const passkeys = await getPasskeysByUser(env.DB, user.id);
 
   // Name taken = another password-holding user has this name
-  const { getUserByName: gbn } = await import('../db/queries.js');
+  const gbn = getUserByName;
   const other = await gbn(env.DB, nameKey(user.name));
   const nameTaken = !!(other && other.id !== user.id && other.pw_hash);
 
@@ -628,7 +628,7 @@ app.post('/api/account/password', async (c) => {
   const problem = passwordProblem(body.next, user.name);
   if (problem) return c.json({ error: POLICY_MSGS[problem] || problem, code: problem }, 400);
 
-  const { getUserByName: gbn } = await import('../db/queries.js');
+  const gbn = getUserByName;
   const other = await gbn(env.DB, nameKey(user.name));
   if (other && other.id !== user.id && other.pw_hash) {
     return c.json({ error: 'another profile already signs in with this name', code: 'name-taken' }, 409);
@@ -739,7 +739,7 @@ app.post('/api/account/email', async (c) => {
   const fresh = await getSession(c);
   if (!fresh || fresh.user.id !== user.id) return c.json({ error: 'not signed in' }, 401);
 
-  const { getUserByEmail: gbe } = await import('../db/queries.js');
+  const gbe = getUserByEmail;
   const emailUser = await gbe(env.DB, email);
   if (emailUser && emailUser.id !== user.id) {
     await failBackoff(env.RATE_LIMITS, addrKey, addrOpts);
@@ -793,7 +793,7 @@ app.post('/api/admin/user/password-reset', async (c) => {
   if (isAdmin(target, env)) return c.json({ error: 'an admin sets their own password in Settings' }, 400);
 
   // Check name uniqueness for the reset (the name must remain unique post-reset)
-  const { getUserByName: gbn } = await import('../db/queries.js');
+  const gbn = getUserByName;
   const other = await gbn(env.DB, nameKey(target.name));
   if (other && other.id !== target.id && other.pw_hash) {
     return c.json({ error: 'another profile already signs in with this name', code: 'name-taken' }, 409);
