@@ -83,13 +83,13 @@ export async function takeChallenge(kv, cid) {
   return data;
 }
 
-// ── Session store (KV SESSIONS namespace, key: session:{sha256(token)}) ───────
+// ── Session store (KV SESSIONS namespace, key: session:{userId}:{sha256(token)}) ───────
 
 export async function storeSession(kv, token, userId, sv, sessionDays) {
   const h = await sha256hex(token);
   const ttl = Math.max(60, sessionDays * 86400);
   await kv.put(
-    'session:' + h,
+    `session:${userId}:${h}`,
     JSON.stringify({ userId, sv: sv || 0 }),
     { expirationTtl: ttl },
   );
@@ -136,7 +136,7 @@ export async function getSession(c) {
 
   // Check KV entry (per-token revocation via logout)
   const h = await sha256hex(tok);
-  const raw = await env.SESSIONS.get('session:' + h);
+  const raw = await env.SESSIONS.get(`session:${parsed.userId}:${h}`);
   if (!raw) return null;
 
   let entry;
@@ -198,28 +198,20 @@ async function setCookieAndJson(c, body, token, days, secure) {
   return c.json(body, 200, { 'Set-Cookie': cookie });
 }
 
-async function clearSession(kv, tok) {
+async function clearSession(kv, tok, userId) {
   const h = await sha256hex(tok);
-  await kv.delete('session:' + h);
+  await kv.delete(`session:${userId}:${h}`);
 }
 
 // Scan and delete all KV session entries for a user (best-effort, uses waitUntil).
+// Uses per-user prefix session:{userId}: for O(1) list — no per-key reads.
 async function deleteUserSessions(kv, userId) {
   let cursor;
   for (;;) {
-    const opts = { prefix: 'session:', limit: 1000 };
+    const opts = { prefix: `session:${userId}:`, limit: 1000 };
     if (cursor) opts.cursor = cursor;
     const result = await kv.list(opts);
-    const toDelete = [];
-    for (const key of result.keys) {
-      const val = await kv.get(key.name);
-      if (val) {
-        try {
-          if (JSON.parse(val).userId === userId) toDelete.push(key.name);
-        } catch { /* skip */ }
-      }
-    }
-    await Promise.all(toDelete.map(k => kv.delete(k)));
+    await Promise.all(result.keys.map(key => kv.delete(key.name)));
     if (result.list_complete) break;
     cursor = result.cursor;
   }
@@ -446,7 +438,7 @@ app.post('/api/logout', async (c) => {
   const env = c.env;
   const session = await getSession(c);
   if (session) {
-    await clearSession(env.SESSIONS, session.token);
+    await clearSession(env.SESSIONS, session.token, session.user.id);
     doAudit(c, 'auth.logout', { ok: true, uid: session.user.id, name: session.user.name });
   }
   const [cookie] = clearCookieHeaders(isSecure(env));
