@@ -1,0 +1,56 @@
+name: Deploy Fitness Worker
+
+# Deploys the Cloudflare Workers backend whenever worker/ changes on main.
+# Required GitHub secrets:
+#   CLOUDFLARE_API_TOKEN  — create at dash.cloudflare.com → My Profile → API Tokens
+#                           Use the "Edit Cloudflare Workers" template, scope to account
+#                           987ae10a695c542653fd42b42216779c
+#   CLOUDFLARE_ACCOUNT_ID — 987ae10a695c542653fd42b42216779c
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:   # allow manual trigger from Actions tab
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare Workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install worker dependencies
+        run: npm ci
+        working-directory: worker
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy --minify
+
+      - name: Smoke test health endpoint
+        run: |
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://fitness.kc-labs.workers.dev/api/health)
+          echo "Health check status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed with status $STATUS"
+            exit 1
+          fi
+          echo "Worker is live at https://fitness.kc-labs.workers.dev"
