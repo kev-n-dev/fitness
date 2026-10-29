@@ -259,6 +259,7 @@ const toldVitals = v => vitalListeners.forEach(cb => { try { cb(v) } catch {} })
  * Refresh Health Connect vitals and auto-import runs from other apps.
  * Called on app foreground and once at launch (inside initHealthSync).
  * getState / updateState come from the store so imported runs land in S.
+ * Also accumulates daily step counts into S.stepsTotal.
  */
 export async function syncVitals(getState, updateState) {
   if (!MOBILE) return
@@ -271,6 +272,26 @@ export async function syncVitals(getState, updateState) {
     if (merged !== S.runs) {
       updateState(s => { s.runs = merged })
     }
+  }
+  // Accumulate daily step counts into S.stepsLog ({ d: string, steps: number }[])
+  // and keep a rolling total in S.stepsTotal for challenge progress tracking.
+  if (result.vitals?.steps > 0 && updateState) {
+    const today = result.vitals.date
+    const steps = result.vitals.steps
+    updateState(s => {
+      const log = s.stepsLog || []
+      const existing = log.findIndex(e => e.d === today)
+      if (existing >= 0) {
+        // Update today's entry if the new count is higher (HC data can grow through the day)
+        if (steps > log[existing].steps) log[existing] = { d: today, steps }
+      } else {
+        log.push({ d: today, steps })
+        // Keep only last 365 days
+        if (log.length > 365) log.splice(0, log.length - 365)
+      }
+      s.stepsLog = log
+      s.stepsTotal = log.reduce((sum, e) => sum + (e.steps || 0), 0)
+    })
   }
   toldVitals(result)
 }

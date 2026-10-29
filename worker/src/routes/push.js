@@ -5,9 +5,12 @@ import { Hono } from 'hono';
 import { getSession } from './auth.js';
 import { sendPush, VapidError } from '../lib/push.js';
 import { restTimerPush, testPush } from '../lib/nudge.js';
+import { createLogger } from '../lib/logger.js';
 import {
   getSubs, createSub, deleteSub, getVapidKeys, getUserState,
 } from '../db/queries.js';
+
+const log = createLogger('push');
 
 const MAX_SUBS_PER_USER = 20;
 const PRESENCE_TTL         = 70;  // KV expirationTtl (s) for active presence (~3.5× 20 s heartbeat)
@@ -78,12 +81,22 @@ export async function sendPushToUser(env, userId, payload, deviceId) {
   const filtered = deviceId
     ? subs.filter(s => !s.device_id || s.device_id === deviceId)
     : subs;
-  if (!filtered.length) return;
+  if (!filtered.length) {
+    log.debug(env, 'sendPushToUser: no subscriptions', { userId, deviceId });
+    return;
+  }
 
   const vapidRow = await getVapidKeys(env.DB);
-  if (!vapidRow) return;
+  if (!vapidRow) {
+    log.warn(env, 'sendPushToUser: VAPID keys not configured', { userId });
+    return;
+  }
   const vapidKeys = { publicKey: vapidRow.public_key, privateKey: vapidRow.private_key };
   const subject = env.VAPID_SUBJECT || 'mailto:admin@localhost';
+
+  log.debug(env, 'sendPushToUser: sending to subscriptions', { userId, count: filtered.length, deviceId });
+  let sent = 0;
+  let dead = 0;
 
   for (const sub of filtered) {
     try {
@@ -93,14 +106,19 @@ export async function sendPushToUser(env, userId, payload, deviceId) {
         vapidKeys,
         subject
       );
+      sent++;
     } catch (e) {
       if (e instanceof VapidError && e.code === 'dead') {
+        log.debug(env, 'sendPushToUser: removing dead subscription', { userId, endpoint: sub.endpoint.slice(0, 50) });
         await deleteSub(env.DB, sub.endpoint).catch(() => {});
+        dead++;
       } else {
-        console.error('push send failed', userId, e.message);
+        log.warn(env, 'sendPushToUser: push send failed', { userId, error: e.message });
       }
     }
   }
+
+  log.debug(env, 'sendPushToUser: completed', { userId, sent, dead });
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────

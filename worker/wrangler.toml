@@ -5,6 +5,7 @@ account_id = "987ae10a695c542653fd42b42216779c"
 workers_dev = true
 
 [vars]
+LOG_LEVEL = "info"
 RP_ID = "fitness.kc-labs.workers.dev"
 ORIGIN = "https://fitness.kc-labs.workers.dev"
 RP_NAME = "openGym"
@@ -59,7 +60,7 @@ class_name = "RestTimerDO"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["RestTimerDO"]
+new_sqlite_classes = ["RestTimerDO"]
 
 [triggers]
 crons = ["* * * * *"]

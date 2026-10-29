@@ -18,6 +18,7 @@ import {
 import { checkBackoff, failBackoff, clearBackoff } from '../lib/rate-limit.js';
 import { verifyError } from '../lib/verify-error.js';
 import { audit } from '../lib/audit.js';
+import { createLogger } from '../lib/logger.js';
 import {
   getUserById, getUserByName, getUserByEmail, countUsers, createUser, updateUser,
   getPasskeyById, updatePasskeyCounter, createPasskey,
@@ -25,6 +26,8 @@ import {
   deleteDeviceLinksByUser,
 } from '../db/queries.js';
 import { MAX_PASSKEYS } from '../lib/passkeys.js';
+
+const log = createLogger('auth');
 
 // ── Encoding helpers (no Node.js) ─────────────────────────────────────────────
 
@@ -128,27 +131,47 @@ export async function getSession(c) {
   const authHeader = c.req.header('Authorization') || '';
   const bearerTok = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
   const tok = cookieTok || bearerTok;
-  if (!tok) return null;
+  if (!tok) {
+    log.debug(env, 'getSession: no token found');
+    return null;
+  }
 
   // Verify HMAC signature
   const parsed = await verifySession(tok, env.SECRET);
-  if (!parsed) return null;
+  if (!parsed) {
+    log.debug(env, 'getSession: invalid token signature');
+    return null;
+  }
 
   // Check KV entry (per-token revocation via logout)
   const h = await sha256hex(tok);
   const raw = await env.SESSIONS.get(`session:${parsed.userId}:${h}`);
-  if (!raw) return null;
+  if (!raw) {
+    log.debug(env, 'getSession: session not found in KV', { userId: parsed.userId });
+    return null;
+  }
 
   let entry;
-  try { entry = JSON.parse(raw); } catch { return null; }
+  try { entry = JSON.parse(raw); } catch {
+    log.warn(env, 'getSession: failed to parse KV entry', { userId: parsed.userId });
+    return null;
+  }
 
   // Fetch user from D1
   const user = await getUserById(env.DB, parsed.userId);
-  if (!user || user.disabled) return null;
+  if (!user || user.disabled) {
+    log.debug(env, 'getSession: user not found or disabled', { userId: parsed.userId, disabled: user?.disabled });
+    return null;
+  }
 
   // Validate session version (catches logout/all)
-  if ((user.sv || 0) !== (entry.sv || 0)) return null;
+  if ((user.sv || 0) !== (entry.sv || 0)) {
+    log.debug(env, 'getSession: session version mismatch', { userId: parsed.userId, userSv: user.sv, entrySv: entry.sv });
+    return null;
+  }
 
+  c.set('userId', user.id);
+  log.debug(env, 'getSession: valid session', { userId: user.id, bearer: !cookieTok });
   return { user, exp: parsed.exp, bearer: !cookieTok, token: tok };
 }
 
@@ -228,13 +251,17 @@ app.post('/api/register/options', async (c) => {
   const body = await c.req.json().catch(() => ({}));
 
   const name = text(body.name).trim().slice(0, 40);
-  if (!name) return c.json({ error: 'name required' }, 400);
+  if (!name) {
+    log.debug(env, 'register/options: name required');
+    return c.json({ error: 'name required' }, 400);
+  }
 
   const INVITE_ONLY = /^(1|true|yes|on)$/i.test(env.INVITE_ONLY || '');
   const code = text(body.code).trim().toUpperCase();
   if (INVITE_ONLY) {
     const inv = await getInvite(env.DB, code);
     if (!inv || inv.used_by || inv.revoked) {
+      log.info(env, 'register/options: invite rejected', { code: code.slice(0, 4) + '***' });
       doAudit(c, 'auth.register.denied', { ok: false, msg: 'invite-rejected' });
       return c.json({ error: 'a valid invite code is required', code: 'invite' }, 403);
     }
@@ -255,6 +282,7 @@ app.post('/api/register/options', async (c) => {
   const cid = await putChallenge(env.SESSIONS, {
     kind: 'register', challenge: options.challenge, name, uid, code,
   });
+  log.debug(env, 'register/options: challenge created', { cid, name });
   return c.json({ cid, options });
 });
 
@@ -268,6 +296,7 @@ app.post('/api/register/verify', async (c) => {
 
   const ch = await takeChallenge(env.SESSIONS, text(body.cid));
   if (!ch || ch.kind !== 'register' || !ch.uid) {
+    log.debug(env, 'register/verify: challenge expired or invalid', { cid: body.cid });
     doAudit(c, 'auth.register.fail', { ok: false, msg: 'challenge-expired' });
     return c.json({ error: 'challenge expired, try again', code: 'challenge-expired' }, 400);
   }
@@ -282,11 +311,13 @@ app.post('/api/register/verify', async (c) => {
       requireUserVerification: false,
     });
   } catch (e) {
+    log.warn(env, 'register/verify: verification error', { error: e.message, uid: ch.uid });
     doAudit(c, 'auth.register.fail', { ok: false, msg: 'verify-error' });
     return c.json({ error: verifyError(e, { rpId: RP_ID, origin: ORIGIN }) }, 400);
   }
 
   if (!verification.verified) {
+    log.warn(env, 'register/verify: not verified', { uid: ch.uid });
     doAudit(c, 'auth.register.fail', { ok: false, msg: 'not-verified' });
     return c.json({ error: 'not verified' }, 400);
   }
@@ -296,6 +327,7 @@ app.post('/api/register/verify', async (c) => {
   // Reject if credential already registered
   const existing = await getPasskeyById(env.DB, credential.id);
   if (existing) {
+    log.warn(env, 'register/verify: credential already exists', { credentialId: credential.id.slice(0, 16) });
     doAudit(c, 'auth.register.fail', { ok: false, msg: 'credential-exists' });
     return c.json({ error: 'credential already registered' }, 409);
   }
@@ -306,6 +338,7 @@ app.post('/api/register/verify', async (c) => {
   if (INVITE_ONLY) {
     invite = await getInvite(env.DB, ch.code);
     if (!invite || invite.used_by || invite.revoked) {
+      log.info(env, 'register/verify: invite no longer valid', { uid: ch.uid });
       doAudit(c, 'auth.register.fail', { ok: false, msg: 'invite-invalid' });
       return c.json({ error: 'invite code is no longer valid, ask for a new one', code: 'invite' }, 403);
     }
@@ -322,6 +355,7 @@ app.post('/api/register/verify', async (c) => {
     invited_by: invite ? invite.code : null,
   };
   await createUser(env.DB, user);
+  log.info(env, 'register/verify: user created', { userId: user.id, name: user.name, admin: !!grantAdmin });
 
   await createPasskey(env.DB, {
     id: credential.id,
@@ -359,6 +393,7 @@ app.post('/api/login/options', async (c) => {
     allowCredentials: [],
   });
   const cid = await putChallenge(env.SESSIONS, { kind: 'login', challenge: options.challenge });
+  log.debug(env, 'login/options: challenge created', { cid });
   return c.json({ cid, options });
 });
 
@@ -372,12 +407,14 @@ app.post('/api/login/verify', async (c) => {
 
   const ch = await takeChallenge(env.SESSIONS, text(body.cid));
   if (ch?.kind !== 'login') {
+    log.debug(env, 'login/verify: challenge expired or invalid', { cid: body.cid });
     doAudit(c, 'auth.login.fail', { ok: false, msg: 'challenge-expired' });
     return c.json({ error: 'challenge expired, try again', code: 'challenge-expired' }, 400);
   }
 
   const cred = await getPasskeyById(env.DB, body.credential?.id);
   if (!cred) {
+    log.debug(env, 'login/verify: unknown credential', { credentialId: body.credential?.id?.slice(0, 16) });
     doAudit(c, 'auth.login.fail', { ok: false, msg: 'unknown-credential' });
     return c.json({ error: 'unknown passkey, create a profile first', code: 'unknown-credential' }, 404);
   }
@@ -398,11 +435,13 @@ app.post('/api/login/verify', async (c) => {
       },
     });
   } catch (e) {
+    log.warn(env, 'login/verify: verification error', { error: e.message, userId: cred.user_id });
     doAudit(c, 'auth.login.fail', { ok: false, uid: cred.user_id, msg: 'verify-error' });
     return c.json({ error: verifyError(e, { rpId: RP_ID, origin: ORIGIN }) }, 400);
   }
 
   if (!verification.verified) {
+    log.warn(env, 'login/verify: not verified', { userId: cred.user_id });
     doAudit(c, 'auth.login.fail', { ok: false, uid: cred.user_id, msg: 'not-verified' });
     return c.json({ error: 'not verified' }, 400);
   }
@@ -414,8 +453,12 @@ app.post('/api/login/verify', async (c) => {
   );
 
   const user = await getUserById(env.DB, cred.user_id);
-  if (!user) return c.json({ error: 'user missing' }, 500);
+  if (!user) {
+    log.error(env, 'login/verify: user missing after passkey found', { userId: cred.user_id });
+    return c.json({ error: 'user missing' }, 500);
+  }
   if (user.disabled) {
+    log.info(env, 'login/verify: account disabled', { userId: user.id, name: user.name });
     doAudit(c, 'auth.login.fail', { ok: false, uid: user.id, name: user.name, msg: 'account-disabled' });
     return c.json({ error: 'this account has been disabled', code: 'disabled' }, 403);
   }
@@ -426,6 +469,7 @@ app.post('/api/login/verify', async (c) => {
   const token = await makeSession(user.id, sv, days, env.SECRET);
   await storeSession(env.SESSIONS, token, user.id, sv, days);
 
+  log.info(env, 'login/verify: user logged in', { userId: user.id, name: user.name });
   doAudit(c, 'auth.login.ok', { ok: true, uid: user.id, name: user.name });
 
   const [cookie] = sessionCookieHeader(token, days, secure);
@@ -462,7 +506,7 @@ app.post('/api/logout/all', async (c) => {
   const ctx = c.executionCtx ?? { waitUntil: () => {} };
   ctx.waitUntil(
     deleteUserSessions(env.SESSIONS, user.id).catch(e =>
-      console.error('logout/all kv cleanup:', e?.message)),
+      log.warn(env, 'logout/all kv cleanup failed', { userId: user.id, error: e?.message })),
   );
 
   doAudit(c, 'auth.logout.all', { ok: true, uid: user.id, name: user.name });

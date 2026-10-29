@@ -2395,11 +2395,111 @@ const routes = {
     json(res, 200, { ok: true });
   },
 
+  // ── Team Feed ──────────────────────────────────────────────────────────────
+  // Returns recent activity from all users on this instance who haven't opted out
+  // (S.socialPrivate = true), plus a live-now list of users currently training.
+  // Only workout completions, accolades and recipes are exposed — no exercise details,
+  // weights, measurements or health data leave the state file.
+  'GET /api/feed': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+
+    const FEED_DAYS = 30;
+    const cutoff = Date.now() - FEED_DAYS * 86400000;
+    const items = [];
+
+    for (const u of db.users) {
+      if (u.disabled) continue;
+      const S = readState(u.id);
+      if (!S || S.socialPrivate) continue;
+
+      const isMe = u.id === user.id;
+      const uid  = u.id;
+      const name = u.name;
+
+      // Routine id → name lookup for workout display names
+      const routineMap = Object.fromEntries(
+        records(S.routines || []).map(r => [r.id, text(r.name).slice(0, 60)])
+      );
+
+      // Recent workouts — cap per user to avoid huge payloads on large instances
+      const recentWorkouts = records(S.workouts || []).filter(w => {
+        const at = Number(w.end) || new Date((w.d || '') + 'T12:00:00').getTime();
+        return at >= cutoff;
+      }).slice(-30);
+
+      for (const w of recentWorkouts) {
+        const at = Number(w.end) || new Date((w.d || '') + 'T12:00:00').getTime();
+        const ids = Array.isArray(w.routineIds) ? w.routineIds : (w.routineId ? [w.routineId] : []);
+        const routineLabel = ids.map(id => routineMap[id]).filter(Boolean).join(' + ');
+        items.push({
+          type: 'workout', uid, name, at, isMe,
+          data: {
+            label:      text(w.name || routineLabel || 'Workout').slice(0, 60),
+            durationMs: (w.end > w.start && w.start > 0) ? w.end - w.start : null,
+            date:       w.d || null,
+          },
+        });
+      }
+
+      // Accolades (badges earned by completing challenges)
+      for (const a of records(S.accolades || [])) {
+        const at = Number(a.earnedAt);
+        if (!at || at < cutoff) continue;
+        items.push({
+          type: 'accolade', uid, name, at, isMe,
+          data: {
+            label: text(a.name).slice(0, 60),
+            emoji: text(a.emoji).slice(0, 8),
+            color: typeof a.color === 'string' && /^(var\(|#)/.test(a.color) ? a.color : null,
+          },
+        });
+      }
+
+      // Recipes created
+      for (const r of records(S.recipes || [])) {
+        const at = Number(r.createdAt);
+        if (!at || at < cutoff) continue;
+        items.push({
+          type: 'recipe', uid, name, at, isMe,
+          data: {
+            label: text(r.name).slice(0, 60),
+            emoji: text(r.emoji).slice(0, 8),
+          },
+        });
+      }
+    }
+
+    // Sort newest first, return up to 60 items
+    items.sort((a, b) => b.at - a.at);
+
+    // Live presence — who is training right now
+    const liveNow = [];
+    const now = Date.now();
+    for (const [uid, p] of presence) {
+      if (!presenceListed(p, now)) continue;
+      const u = db.users.find(x => x.id === uid && !x.disabled);
+      if (!u) continue;
+      const S = readState(uid);
+      if (S?.socialPrivate) continue;
+      liveNow.push({
+        uid, name: u.name, isMe: uid === user.id,
+        workoutName: text(p.name).slice(0, 60),
+        setsDone:  +p.setsDone  || 0,
+        setsTotal: +p.setsTotal || 0,
+        exIdx:     +p.exIdx     || 0,
+        exTotal:   +p.exTotal   || 0,
+        startedAt: +p.startedAt || now,
+      });
+    }
+
+    json(res, 200, { items: items.slice(0, 60), liveNow, now });
+  },
+
   // Live-workout heartbeat: client pings while a workout is on screen; { active:false } drops it,
   // except with reason `hidden`, which marks it away (see PRESENCE_HIDDEN_GRACE). `navigated`,
   // `closed`, and no reason at all (older clients), drop it at once.
   'POST /api/activity': async (req, res) => {
-    const user = readSession(req);
     if (!user) return json(res, 401, { error: 'not signed in' });
     const body = await readBody(req);
     if (body.active) {

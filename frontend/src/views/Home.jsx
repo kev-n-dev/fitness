@@ -425,7 +425,7 @@ export default function Home() {
     </div>
 
     {/* ── Goals & trackers ─────────────────────────────────────────────────── */}
-    <h2 style={{ margin: '20px 2px 10px', fontSize: 20, fontWeight: 700, letterSpacing: '-.021em' }}>{t('Goals & trackers')}</h2>
+    <h2 style={{ margin: '18px 2px 10px', fontSize: 20, fontWeight: 700, letterSpacing: '-.021em' }}>{t('Goals & trackers')}</h2>
 
     <div className="goals-grid">
       {/* Weekly workouts */}
@@ -441,17 +441,18 @@ export default function Home() {
         />
       )}
 
-      {/* Daily steps — only when Health Connect has today's data */}
-      {vitals && (
-        <GoalTile
-          icon="steps"
-          label={t('Steps today')}
-          value={(vitals.steps || 0).toLocaleString()}
-          sub={`${t('Goal')} ${(S.stepGoal || 10000).toLocaleString()}`}
-          pct={((vitals.steps || 0) / (S.stepGoal || 10000)) * 100}
-          color="var(--teal)"
-        />
-      )}
+      {/* Daily steps — always shown; 0 when HC isn't connected yet */}
+      <GoalTile
+        icon="steps"
+        label={t('Steps today')}
+        value={(vitals?.steps || 0).toLocaleString()}
+        sub={vitals
+          ? `${t('Goal')} ${(S.stepGoal || 10000).toLocaleString()}`
+          : t('Needs Health Connect')}
+        pct={((vitals?.steps || 0) / (S.stepGoal || 10000)) * 100}
+        color={vitals ? 'var(--teal)' : 'var(--label-3)'}
+        onClick={vitals ? undefined : (MOBILE ? connectHealthRead : undefined)}
+      />
 
       {/* Sleep — last night, from HC */}
       {vitals?.sleep && <SleepTile sleep={vitals.sleep} />}
@@ -493,16 +494,6 @@ export default function Home() {
         </div>
       </GoalTile>
 
-      {/* Streak goal — always shown */}
-      <GoalTile
-        icon="flame"
-        label={t('Streak')}
-        value={t('{0} week streak', streakWeeks(S))}
-        sub={S.workouts.length ? tn('{0} workout total', '{0} workouts total', S.workouts.length) : t('Keep it up!')}
-        pct={Math.min(100, (streakWeeks(S) / Math.max(4, streakWeeks(S))) * 100)}
-        color="var(--orange)"
-        onClick={() => calendarSheet()}
-      />
     </div>
 
     {/* ── Health Connect monitors ──────────────────────────────────────────── */}

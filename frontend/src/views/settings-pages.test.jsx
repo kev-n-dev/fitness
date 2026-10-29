@@ -134,17 +134,16 @@ describe('the root', () => {
     mocks.MOBILE = true
     mount()
     expect(titles()).toContain('Reminders')
-    expect(titles()).toContain('AI Coach')
+    expect(titles()).not.toContain('AI Coach')
     expect(host.querySelector('.sp-acct .lrow-t').textContent).toBe('This phone')
   })
 
-  it('a row opens its page; the Coach row opens the phone Coach setup; the card opens Account', () => {
+  it('a row opens its page; the card opens Account', () => {
     mocks.MOBILE = true
     mount()
     act(() => rowTitled('Timer alerts').click())
-    act(() => rowTitled('AI Coach').click())
     act(() => host.querySelector('.sp-acct').click())
-    expect(mocks.navs).toEqual([['/settings/alerts'], ['/coach/setup'], ['/settings/account']])
+    expect(mocks.navs).toEqual([['/settings/alerts'], ['/settings/account']])
   })
 
   it('searches every setting and a hit goes to its page with the row to flash', () => {
@@ -395,7 +394,7 @@ describe('searchSettings', () => {
     expect(searchSettings('nudge', { ...guestWeb, user: { id: 'u' }, pushOK: true, reminderOn: true }, tr).map(h => h.title)).toEqual(['Nudge me when I skip a planned workout'])
     expect(searchSettings('nudge', { ...guestWeb, mobile: true, reminderOn: true }, tr).map(h => h.title)).toEqual(['Nudge me when I skip a planned workout'])
     expect(searchSettings('coach', guestWeb, tr)).toEqual([])
-    expect(searchSettings('coach', { ...guestWeb, mobile: true }, tr)[0].page).toBe('coach')
+    expect(searchSettings('coach', { ...guestWeb, mobile: true }, tr)).toEqual([])
     expect(searchSettings('vibrate silent', { ...guestWeb, mobile: true, android: true }, tr).map(h => h.title)).toEqual(['Vibrate on silent too'])
     expect(searchSettings('   ', guestWeb, tr)).toEqual([])
   })

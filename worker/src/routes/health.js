@@ -4,7 +4,9 @@ import { generateVAPIDKeys } from '../lib/push.js';
 import { countUsers, getVapidKeys, putVapidKeys } from '../db/queries.js';
 import { makeSession, sessionCookieHeader } from '../lib/session.js';
 import { getSession, storeSession } from './auth.js';
+import { createLogger } from '../lib/logger.js';
 
+const log = createLogger('health');
 const app = new Hono();
 
 // ── GET /api/health ───────────────────────────────────────────────────────────
@@ -15,7 +17,7 @@ app.get('/api/health', async (c) => {
     const users = await countUsers(c.env.DB);
     return c.json({ ok: true, users, writable: true });
   } catch (e) {
-    console.error('health probe failed', e?.message);
+    log.error(c.env, 'health probe failed', { error: e?.message });
     return c.json({ ok: false, writable: false }, 503);
   }
 });
@@ -45,6 +47,7 @@ app.get('/api/config', async (c) => {
         vapidPublicKey = row.public_key;
       } else {
         // First boot — generate, persist, cache.
+        log.info(env, 'generating VAPID keys (first boot)');
         const keys = await generateVAPIDKeys();
         await putVapidKeys(env.DB, keys.publicKey, keys.privateKey);
         vapidPublicKey = keys.publicKey;
@@ -52,7 +55,7 @@ app.get('/api/config', async (c) => {
       await env.APP_CONFIG.put('vapid_public_key', vapidPublicKey);
     }
   } catch (e) {
-    console.error('config: vapid error', e?.message);
+    log.error(env, 'vapid error', { error: e?.message });
   }
 
   const resp = {

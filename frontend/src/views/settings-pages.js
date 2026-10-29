@@ -1,5 +1,8 @@
 // Settings (v1.3.11): which page each row lives on, and the index the search field reads.
 //
+// Feature flags — set to true when the feature is ready to ship.
+export const COACH_ENABLED = false
+//
 // The root holds eleven rows in four groups plus the account card; each opens a page at
 // /settings/<page>. Rare things hang one level further down (Workout → Fine-tuning). Titles here
 // are the English keys the pages render with t(), so a search hit can find its row on the page
@@ -34,7 +37,7 @@ export const ROOT_GROUPS = [['workout', 'alerts', 'reminders'], ['plan', 'units'
  */
 export function pageVisible(page, ctx) {
   if (page === 'reminders') return !!(ctx.user || ctx.mobile)
-  if (page === 'coach') return !!ctx.mobile
+  if (page === 'coach') return !!ctx.mobile && COACH_ENABLED
   return page in PAGES
 }
 

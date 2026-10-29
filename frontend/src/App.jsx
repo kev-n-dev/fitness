@@ -46,6 +46,7 @@ import CoachChat from './views/CoachChat.jsx'
 import Measurements from './views/Measurements.jsx'
 import CoachIntake from './views/CoachIntake.jsx'
 import CoachSetup from './views/CoachSetup.jsx'
+import { COACH_ENABLED } from './views/settings-pages.js'
 import Ranks from './views/Ranks.jsx'
 import RepRank from './views/RepRank.jsx'
 import RunRank from './views/RunRank.jsx'
@@ -55,6 +56,7 @@ import Leaderboard from './views/Leaderboard.jsx'
 import Challenges from './views/Challenges.jsx'
 import Nutrition from './views/Nutrition.jsx'
 import UserProfile from './views/UserProfile.jsx'
+import Social from './views/Social.jsx'
 
 // last known scrollY per route, so back-navigation can put the page where it was
 const scrollPositions = new Map()
@@ -194,7 +196,7 @@ function Shell() {
   }, [inWorkout])
   // The chat owns the bottom of the screen as well: its composer sits where the tabs would be.
   // The first-launch card has no tabs either: they changed the route behind it.
-  const noTabs = inWorkout || loc.pathname === '/coach' || needsMobileOnboarding
+  const noTabs = inWorkout || (COACH_ENABLED && loc.pathname === '/coach') || needsMobileOnboarding
 
   const authed = user || isGuest
   if (!ready && !authed) return (
@@ -229,13 +231,12 @@ function Shell() {
               <Route path="/measurements" element={<Measurements />} />
               <Route path="/settings" element={<SettingsRoute />} />
               <Route path="/settings/:page" element={<SettingsRoute />} />
-              {/* The Coach screens gate themselves on the instance config; the routes exist
-                  unconditionally so a deep link from a notification lands somewhere sane
-                  rather than on the catch-all. */}
-              <Route path="/coach" element={<CoachChat />} />
-              <Route path="/coach/intake" element={<CoachIntake />} />
-              <Route path="/coach/proposal" element={<Navigate to="/coach" replace />} />
-              <Route path="/coach/setup" element={<CoachSetup />} />
+              {/* Coach screens are hidden until COACH_ENABLED is turned on in settings-pages.js.
+                  Any deep link to /coach* falls through to the catch-all redirect below. */}
+              {COACH_ENABLED && <Route path="/coach" element={<CoachChat />} />}
+              {COACH_ENABLED && <Route path="/coach/intake" element={<CoachIntake />} />}
+              {COACH_ENABLED && <Route path="/coach/proposal" element={<Navigate to="/coach" replace />} />}
+              {COACH_ENABLED && <Route path="/coach/setup" element={<CoachSetup />} />}
               <Route path="/admin" element={user?.admin ? <Admin /> : <Navigate to="/home" replace />} />
               {/* ── New competitive & social features ── */}
               <Route path="/ranks" element={<Ranks />} />
@@ -246,7 +247,8 @@ function Shell() {
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/challenges" element={<Challenges />} />
               <Route path="/nutrition" element={<Nutrition />} />
-              <Route path="/profile" element={<UserProfile />} />
+              <Route path="/profile"  element={<UserProfile />} />
+              <Route path="/social"   element={<Social />} />
               <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           )}

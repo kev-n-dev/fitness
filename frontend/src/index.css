@@ -2219,3 +2219,71 @@ button.wl-summary{width:100%;padding:0 0 10px;text-align:start;border-radius:var
 [dir="rtl"] *{letter-spacing:0}
 .exfix-link{display:inline-flex;align-items:center;gap:5px;margin:14px 0 4px;color:var(--label-3);text-decoration:none}
 .list .similar-label{margin:16px 2px 6px;grid-column:1/-1}
+
+/* ──────────────────────────────────────────────── challenges (Challenges) ── */
+
+/* Section card header — tappable row */
+.challenge-section-header{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:start;
+  padding:0;border:none;background:none;cursor:pointer;
+  min-height:44px;
+}
+.challenge-section-header:active .lrow-i{filter:brightness(.85)}
+.challenge-section-title{
+  flex:1;display:flex;flex-direction:column;gap:1px;
+}
+
+/* Mini progress pill inside section header */
+.challenge-section-pill{
+  width:40px;height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden;flex:none;
+}
+.challenge-section-pill-fill{height:100%;border-radius:3px;transition:width .4s var(--ease)}
+
+/* Challenge list — divider between rows */
+.challenge-list{margin-top:12px}
+.challenge-row-wrap{padding:10px 0}
+.challenge-row-sep{border-bottom:.5px solid var(--sep)}
+
+/* Individual challenge row */
+.challenge-row{display:flex;gap:12px;align-items:flex-start}
+.challenge-emoji{font-size:24px;line-height:1;flex:none;margin-top:1px}
+.challenge-body{flex:1;min-width:0}
+.challenge-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.challenge-name{font-size:15px;font-weight:500;letter-spacing:-.01em}
+.challenge-tag{font-size:11px!important;padding:2px 6px!important;white-space:nowrap}
+
+/* Progress bar inside a challenge row */
+.challenge-bar{
+  height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden;margin-top:6px;
+}
+.challenge-bar-fill{
+  height:100%;border-radius:2px;background:var(--orange);
+  transition:width .4s var(--ease);
+}
+
+/* ──────────────────────────────────────────────────────── Social (Team Feed) ── */
+
+/* Pulsing green dot for "Live now" */
+.live-dot{
+  width:9px;height:9px;border-radius:50%;background:var(--green);flex:none;
+  box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 60%,transparent);
+  animation:live-ping 1.6s var(--ease) infinite;
+}
+@keyframes live-ping{
+  0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 60%,transparent)}
+  70%{box-shadow:0 0 0 7px transparent}
+  100%{box-shadow:0 0 0 0 transparent}
+}
+@media (prefers-reduced-motion:reduce){.live-dot{animation:none}}
+
+/* Feed item row */
+.feed-item{
+  display:flex;align-items:flex-start;gap:12px;padding:14px 16px;
+}
+.feed-item-body{flex:1;min-width:0}
+.feed-item-text{font-size:14px;line-height:1.4;letter-spacing:-.005em}
+.feed-item-meta{
+  display:flex;align-items:center;gap:6px;margin-top:5px;
+  font-size:12px;color:var(--label-3);
+}
+.feed-item-meta .lrow-i{display:inline-flex}

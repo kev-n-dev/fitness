@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { logMiddleware, createLogger } from './lib/logger.js';
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
 import pairRoutes from './routes/pair.js';
@@ -10,10 +11,15 @@ import adminRoutes, { reminderTick } from './routes/admin.js';
 import mediaRoutes from './routes/media.js';
 export { RestTimerDO } from './durable/rest-timer.js';
 
+const log = createLogger('worker');
+
 const APP_ORIGINS = [
   'capacitor://localhost',
   'https://localhost',
   'http://localhost',
+  'https://fitness-app.pages.dev',
+  'https://fitness-app-dvv.pages.dev',
+  'https://99f5dee4.fitness-app-dvv.pages.dev',
 ];
 
 // Routes exempt from CSRF checks. These routes carry their own one-shot
@@ -28,6 +34,9 @@ const CSRF_EXEMPT = new Set([
 ]);
 
 const app = new Hono();
+
+// ── Logging middleware ────────────────────────────────────────────────────────
+app.use('*', logMiddleware());
 
 // ── CORS middleware ───────────────────────────────────────────────────────────
 app.use('*', async (c, next) => {
@@ -93,6 +102,13 @@ export default {
   fetch: app.fetch,
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(reminderTick(env, ctx));
+    log.debug(env, 'cron triggered', { cron: event.cron });
+    const start = Date.now();
+    try {
+      ctx.waitUntil(reminderTick(env, ctx));
+      log.debug(env, 'cron completed', { duration: Date.now() - start });
+    } catch (err) {
+      log.error(env, 'cron failed', { error: err?.message, duration: Date.now() - start });
+    }
   },
 };

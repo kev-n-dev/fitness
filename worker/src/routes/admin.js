@@ -3,6 +3,7 @@
 import { Hono } from 'hono';
 import { getSession } from './auth.js';
 import { audit } from '../lib/audit.js';
+import { createLogger } from '../lib/logger.js';
 import { sendPushToUser } from './push.js';
 import {
   listUsers, getUserById, updateUser, deleteUser,
@@ -13,6 +14,8 @@ import {
   nudgeWindowOpen, nudgeFor, toneOf, excusedOn, effectiveRoutineId,
   dayReminderPush, nudgePush,
 } from '../lib/nudge.js';
+
+const log = createLogger('admin');
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -225,7 +228,7 @@ app.post('/api/admin/user/delete', async (c) => {
         cursor = listed.truncated ? listed.cursor : null;
       } while (cursor);
     } catch (e) {
-      console.error('admin: could not remove R2 media for', u.id, e.message);
+      log.error(env, 'could not remove R2 media', { userId: u.id, error: e.message });
     }
   }
 
@@ -394,12 +397,19 @@ function userNow(tz) {
  * @param {ExecutionContext} ctx
  */
 export async function reminderTick(env, ctx) {
+  const cronLog = createLogger('cron');
+  
   // Only process users that have at least one push subscription.
   const { results: usersWithSubs } = await env.DB.prepare(`
     SELECT DISTINCT u.* FROM users u
     INNER JOIN push_subscriptions ps ON ps.user_id = u.id
     WHERE u.disabled = 0
   `).all();
+
+  cronLog.debug(env, 'reminderTick: processing users', { count: usersWithSubs.length });
+
+  let reminders = 0;
+  let nudges = 0;
 
   for (const user of usersWithSubs) {
     try {
@@ -422,11 +432,13 @@ export async function reminderTick(env, ctx) {
             const rid = nudgeFor(S, now.date);
             if (rid) {
               const routine = records(S.routines).find(r => r?.id === rid);
+              cronLog.debug(env, 'reminderTick: sending nudge', { userId: user.id, routineId: rid });
               await sendPushToUser(
                 env, user.id,
                 nudgePush(S.lang, toneOf(S.reminder), routine, now.date)
               );
               await updateUser(env.DB, user.id, { last_nudge: now.date });
+              nudges++;
             }
           }
         }
@@ -443,10 +455,14 @@ export async function reminderTick(env, ctx) {
       if (!rid) continue;
       const routine = records(S.routines).find(r => r?.id === rid);
 
+      cronLog.debug(env, 'reminderTick: sending reminder', { userId: user.id, routineId: rid });
       await sendPushToUser(env, user.id, dayReminderPush(S.lang, routine));
       await updateUser(env.DB, user.id, { last_reminder: now.date });
+      reminders++;
     } catch (e) {
-      console.error('reminder tick', user.id, e);
+      cronLog.error(env, 'reminderTick: user error', { userId: user.id, error: e?.message });
     }
   }
+
+  cronLog.info(env, 'reminderTick: completed', { processed: usersWithSubs.length, reminders, nudges });
 }

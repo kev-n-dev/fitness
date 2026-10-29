@@ -48,6 +48,8 @@ export default function TabBar({ onStart }) {
     || (cur === 'leaderboard' && k === 'ranks')
     || (cur === 'challenges' && k === 'ranks')
 
+  const onSocial = cur === 'social' || cur === 'profile'
+
   return (
     <nav id="tabbar">
       <Tab active={on('home')} icon="house" label={t('Home')} dot={trouble} onClick={() => nav('/home')} />
@@ -60,7 +62,7 @@ export default function TabBar({ onStart }) {
           : <span>{S.active ? (cur === 'workout' ? t('Workout') : S.active.editingWorkoutId ? t('Edit workout') : t('Resume')) : t('Start')}</span>}
       </button>
       <Tab active={on('nutrition')} icon="leaf" label="Nutrition" onClick={() => nav('/nutrition')} />
-      <Tab active={on('profile')} icon="person" label="Profile" onClick={() => nav('/profile')} />
+      <Tab active={onSocial} icon="chat" label="Social" onClick={() => nav('/social')} />
     </nav>
   )
 }

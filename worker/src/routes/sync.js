@@ -8,6 +8,9 @@ import { Hono } from 'hono';
 import { getSession } from './auth.js';
 import { getUserState, updateUser } from '../db/queries.js';
 import { stampPut } from '../lib/sync-stamps.js';
+import { createLogger } from '../lib/logger.js';
+
+const log = createLogger('sync');
 
 // ── constants ──────────────────────────────────────────────────────────────────
 
@@ -77,9 +80,12 @@ async function noteState(env, uid, curState, newState) {
         );
       }
     }
-    if (ops.length) await Promise.all(ops);
+    if (ops.length) {
+      await Promise.all(ops);
+      log.debug(env, 'noteState: GC marks updated', { userId: uid, newRefs: newRefs.size, orphaned: oldRefs.size - newRefs.size });
+    }
   } catch (e) {
-    console.error('noteState failed', uid, e?.message);
+    log.warn(env, 'noteState failed', { userId: uid, error: e?.message });
   }
 }
 
@@ -95,14 +101,18 @@ app.get('/api/data', async (c) => {
   const { user } = session;
   const env = c.env;
 
+  log.debug(env, 'GET /api/data: fetching state', { userId: user.id });
   const row = await getUserState(env.DB, user.id);
-  if (!row) return c.json({ state: null, rev: 0 });
+  if (!row) {
+    log.debug(env, 'GET /api/data: no state found', { userId: user.id });
+    return c.json({ state: null, rev: 0 });
+  }
 
   let state;
   try {
     state = JSON.parse(row.state);
   } catch {
-    console.error('state unreadable for', user.id);
+    log.error(env, 'GET /api/data: state unreadable', { userId: user.id });
     return c.json({ error: 'state unreadable' }, 503);
   }
 
@@ -112,10 +122,11 @@ app.get('/api/data', async (c) => {
     const ctx = c.executionCtx ?? { waitUntil: () => {} };
     ctx.waitUntil(
       updateUser(env.DB, user.id, { last_pull: now })
-        .catch(e => console.error('notePull failed', e?.message)),
+        .catch(e => log.warn(env, 'notePull failed', { userId: user.id, error: e?.message })),
     );
   }
 
+  log.debug(env, 'GET /api/data: returning state', { userId: user.id, rev: row.rev });
   return c.json({ state: forClient(state), rev: row.rev });
 });
 
@@ -161,9 +172,11 @@ app.put('/api/data', async (c) => {
   const env = c.env;
 
   const body = await c.req.json().catch(() => ({}));
+  log.debug(env, 'PUT /api/data: received', { userId: user.id, baseRev: body.baseRev });
 
   // ── validate body.state ────────────────────────────────────────────────────
   if (!body.state || typeof body.state !== 'object') {
+    log.debug(env, 'PUT /api/data: state required', { userId: user.id });
     return c.json({ error: 'state required' }, 400);
   }
   // Reject a document whose only keys are server-owned bookkeeping (_rev, _ts).
@@ -171,10 +184,12 @@ app.put('/api/data', async (c) => {
     !Array.isArray(body.state) &&
     !Object.keys(body.state).some(k => k !== '_rev' && k !== '_ts')
   ) {
+    log.debug(env, 'PUT /api/data: state required (empty)', { userId: user.id });
     return c.json({ error: 'state required' }, 400);
   }
   const isList = v => v == null || Array.isArray(v);
   if (Array.isArray(body.state) || !isList(body.state.workouts) || !isList(body.state.routines)) {
+    log.debug(env, 'PUT /api/data: invalid state structure', { userId: user.id });
     return c.json({ error: 'invalid state' }, 400);
   }
   // Drop non-object entries from the two lists the server iterates.
@@ -189,7 +204,7 @@ app.put('/api/data', async (c) => {
     try {
       cur = JSON.parse(row.state);
     } catch {
-      console.error('state unreadable for', user.id);
+      log.error(env, 'PUT /api/data: state unreadable', { userId: user.id });
       return c.json({ error: 'state unreadable' }, 503);
     }
   }
@@ -205,6 +220,7 @@ app.put('/api/data', async (c) => {
       cur?._wid &&
       body.baseWid !== cur._wid)
   ) {
+    log.info(env, 'PUT /api/data: conflict detected', { userId: user.id, baseRev: body.baseRev, curRev });
     return c.json({ error: 'conflict', rev: curRev, state: forClient(cur) }, 409);
   }
 
@@ -231,7 +247,10 @@ app.put('/api/data', async (c) => {
       report,
     });
   } catch (e) {
-    if (e instanceof RangeError) return c.json({ error: 'invalid state' }, 400);
+    if (e instanceof RangeError) {
+      log.debug(env, 'PUT /api/data: stampPut RangeError', { userId: user.id });
+      return c.json({ error: 'invalid state' }, 400);
+    }
     throw e;
   }
 
@@ -258,7 +277,10 @@ app.put('/api/data', async (c) => {
   try {
     text = JSON.stringify(body.state);
   } catch (e) {
-    if (e instanceof RangeError) return c.json({ error: 'invalid state' }, 400);
+    if (e instanceof RangeError) {
+      log.debug(env, 'PUT /api/data: JSON.stringify RangeError', { userId: user.id });
+      return c.json({ error: 'invalid state' }, 400);
+    }
     throw e;
   }
 
@@ -269,6 +291,7 @@ app.put('/api/data', async (c) => {
        ON CONFLICT(user_id) DO UPDATE SET state = excluded.state, rev = excluded.rev`,
     ).bind(user.id, text, rev),
   ]);
+  log.debug(env, 'PUT /api/data: state written', { userId: user.id, rev, wid: wid.slice(0, 8), size: text.length });
 
   // ── post-write KV bookkeeping (non-blocking) ───────────────────────────────
   // Cache the new rev so GET /api/data/rev answers from KV for the next 5 min.
@@ -282,7 +305,7 @@ app.put('/api/data', async (c) => {
         { expirationTtl: 300 },
       );
       await noteState(env, user.id, cur, body.state);
-    })().catch(e => console.error('sync post-write KV failed', e?.message)),
+    })().catch(e => log.warn(env, 'sync post-write KV failed', { userId: user.id, error: e?.message })),
   );
 
   return c.json({ ok: true, ts: body.state._ts || null, rev, wid });
