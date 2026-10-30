@@ -53,7 +53,7 @@ export default function TabBar({ onStart }) {
   return (
     <nav id="tabbar">
       <Tab active={on('home')} icon="house" label={t('Home')} dot={trouble} onClick={() => nav('/home')} />
-      <Tab active={onEx('ranks')} icon="trophy" label="Compete" onClick={() => nav('/ranks')} />
+      <Tab active={on('plan')} icon="clipboard" label={t('Plan')} onClick={() => nav('/plan')} />
       {/* Centre start / resume button */}
       <button className={'start' + (S.active ? ' rec' : '') + (S.active && cur === 'workout' ? ' on' : '')} onClick={startWorkout}
         aria-label={running ? t('Resume') : undefined}>
@@ -61,8 +61,8 @@ export default function TabBar({ onStart }) {
         {running ? <span className="tab-time"><Elapsed start={S.active.start} /></span>
           : <span>{S.active ? (cur === 'workout' ? t('Workout') : S.active.editingWorkoutId ? t('Edit workout') : t('Resume')) : t('Start')}</span>}
       </button>
-      <Tab active={on('nutrition')} icon="leaf" label="Nutrition" onClick={() => nav('/nutrition')} />
-      <Tab active={onSocial} icon="chat" label="Social" onClick={() => nav('/social')} />
+      <Tab active={on('stats')} icon="chart" label={t('Stats')} onClick={() => nav('/stats')} />
+      <Tab active={on('library')} icon="search" label={t('Library')} onClick={() => nav('/library')} />
     </nav>
   )
 }
