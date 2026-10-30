@@ -23,7 +23,7 @@ reproduce, modify, adapt, translate, publish, distribute, sublicense and sell yo
 and works based on them, in any form and through any channel (including app stores), and to
 license them to others **under any terms, including the GNU AGPL v3, other open-source licences
 and proprietary or commercial licences**. We may also remove or replace your Contributions at any
-time.
+time. 
 
 We may transfer this licence to a successor of the openGym project, for example a buyer of the
 project or a company that continues it.
