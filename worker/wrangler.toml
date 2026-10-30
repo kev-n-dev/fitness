@@ -6,13 +6,13 @@ workers_dev = true
 
 [vars]
 LOG_LEVEL = "info"
-RP_ID = "fitness.kc-labs.workers.dev"
-ORIGIN = "https://fitness.kc-labs.workers.dev"
+RP_ID = "fitness-app-dvv.pages.dev"
+ORIGIN = "https://fitness-app-dvv.pages.dev"
 RP_NAME = "openGym"
 SESSION_DAYS = "90"
 INVITE_ONLY = "false"
 ALLOW_GUEST = "true"
-PASSWORD_LOGIN = "false"
+PASSWORD_LOGIN = "true"
 FIRST_USER_ADMIN = "true"
 AUDIT_LOG = "true"
 AUDIT_MAX = "5000"
