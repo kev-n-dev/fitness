@@ -14,7 +14,8 @@
 export const MIN_LENGTH = 10;
 export const MAX_LENGTH = 256;
 
-const ITERATIONS = 310000;
+// Cloudflare Workers limit PBKDF2 to 100,000 iterations max
+const ITERATIONS = 100000;
 const KEYLEN = 32;
 const SALT_BYTES = 16;
 
@@ -55,15 +56,16 @@ async function pbkdf2(password, salt, iterations, keylen) {
   return new Uint8Array(bits);
 }
 
-function formatHash(salt, key) {
-  return `pbkdf2:sha256:${ITERATIONS}:${hexEncode(salt)}:${hexEncode(key)}`;
+function formatHash(salt, key, iterations = ITERATIONS) {
+  return `pbkdf2:sha256:${iterations}:${hexEncode(salt)}:${hexEncode(key)}`;
 }
 
 function parseHash(stored) {
   const m = /^pbkdf2:sha256:(\d+):([0-9a-f]+):([0-9a-f]+)$/.exec(String(stored || ''));
   if (!m) return null;
   const iterations = Number(m[1]);
-  if (iterations < 1 || iterations > 1000000) return null;
+  // Cloudflare Workers limit PBKDF2 to 100,000 iterations
+  if (iterations < 1 || iterations > 100000) return null;
   const salt = hexDecode(m[2]);
   const key = hexDecode(m[3]);
   if (salt.length < 8 || key.length < 16) return null;
