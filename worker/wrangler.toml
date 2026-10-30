@@ -5,7 +5,7 @@ account_id = "987ae10a695c542653fd42b42216779c"
 workers_dev = true
 
 [vars]
-LOG_LEVEL = "info"
+LOG_LEVEL = "debug"
 RP_ID = "fitness-app-dvv.pages.dev"
 ORIGIN = "https://fitness-app-dvv.pages.dev"
 RP_NAME = "openGym"
