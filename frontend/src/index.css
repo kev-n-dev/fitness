@@ -685,6 +685,64 @@ body.chips-dragging *{cursor:inherit}
 .bmm-detail-chart{margin-top:12px}
 .bmm-detail-actions{display:flex;gap:8px;margin-top:12px}
 
+/* --- avatar builder (character creation style) --- */
+.avatar-builder{display:flex;flex-direction:column;gap:16px}
+.avatar-main{display:flex;gap:16px;align-items:flex-start}
+@media(max-width:600px){.avatar-main{flex-direction:column}}
+.avatar-view{flex:1;max-width:280px;position:relative;background:var(--surface);border-radius:var(--r-card);padding:16px;min-height:400px}
+.avatar-svg{width:100%;height:auto}
+.avatar-part{cursor:pointer;transition:all var(--fast)}
+.avatar-part:hover .avatar-path,.avatar-part:focus .avatar-path{filter:brightness(1.15);stroke:var(--label);stroke-width:2}
+.avatar-part.selected .avatar-path{filter:brightness(1.2);stroke:var(--label);stroke-width:2.5}
+.avatar-path{transition:all var(--fast)}
+.avatar-stat-overlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(8px);border-radius:var(--r);padding:8px 16px;text-align:center;pointer-events:none}
+.avatar-stat-value{font-size:28px;font-weight:700;color:var(--acc)}
+.avatar-stat-unit{font-size:14px;color:var(--label-2);margin-left:4px}
+
+/* Measurement panel */
+.avatar-panel{flex:1;min-width:200px;background:var(--surface);border-radius:var(--r-card);padding:16px}
+.avatar-panel-empty{flex:1;min-width:200px;background:var(--surface);border-radius:var(--r-card);padding:24px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.avatar-panel-icon{font-size:48px;color:var(--label-3)}
+.avatar-panel-empty h3{margin:0;font-size:18px}
+.avatar-panel-empty p{margin:0;color:var(--label-2);font-size:14px}
+.avatar-panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.avatar-panel-header h3{margin:0;font-size:16px;font-weight:600}
+.avatar-panel-value{margin-bottom:8px}
+.avatar-value-big{font-size:42px;font-weight:700;letter-spacing:-.03em;color:var(--label)}
+.avatar-value-unit{font-size:18px;color:var(--label-2);margin-left:6px}
+.avatar-panel-change{font-size:14px;font-weight:500;margin-bottom:8px}
+.avatar-panel-change.up{color:var(--green)}
+.avatar-panel-change.down{color:var(--orange)}
+.avatar-panel-meta{font-size:12px;color:var(--label-3);margin-bottom:16px}
+.avatar-panel-empty-value{padding:20px 0;text-align:center}
+.avatar-panel-empty-value p{margin:0;color:var(--label-2)}
+.avatar-panel-photos{margin-top:16px;padding-top:16px;border-top:1px solid var(--sep)}
+.avatar-panel-photos-label{font-size:12px;color:var(--label-2);display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.avatar-panel-photos-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.avatar-photo-thumb{aspect-ratio:1;border-radius:6px;overflow:hidden;background:var(--surface-2)}
+.avatar-photo-thumb img{width:100%;height:100%;object-fit:cover}
+.avatar-photo-more{aspect-ratio:1;border-radius:6px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--label-2)}
+.avatar-panel-actions{margin-top:12px;display:flex;gap:8px}
+
+/* Progress graph section */
+.avatar-graph-section{background:var(--surface);border-radius:var(--r-card);padding:16px}
+.avatar-graph-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.avatar-graph-header h4{margin:0;font-size:14px;font-weight:600}
+.avatar-range-btns{display:flex;gap:4px}
+.avatar-range-btn{padding:4px 10px;border-radius:6px;font-size:12px;font-weight:500;background:var(--surface-2);color:var(--label-2);border:none;cursor:pointer;transition:all var(--fast)}
+.avatar-range-btn:hover{background:var(--surface-2);color:var(--label)}
+.avatar-range-btn.active{background:var(--acc);color:var(--surface)}
+.avatar-graph{position:relative}
+.avatar-graph-empty{height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--label-3)}
+.avatar-graph-empty .icn{font-size:32px}
+.avatar-graph-hint{position:absolute;bottom:4px;right:4px;font-size:10px;color:var(--label-3);display:flex;align-items:center;gap:4px}
+.avatar-graph-hint .icn{font-size:12px;color:var(--yellow)}
+
+/* Photo tooltip on graph hover */
+.avatar-photo-tooltip{position:fixed;z-index:1000;transform:translate(-50%,-100%);pointer-events:none}
+.avatar-photo-tooltip img{width:120px;height:120px;object-fit:cover;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.avatar-photo-tooltip .avatar-photo-date{text-align:center;font-size:11px;color:var(--label-2);margin-top:4px;background:var(--surface);padding:2px 8px;border-radius:4px}
+
 .exnote{
   background:var(--surface);border-radius:var(--r);padding:13px 15px;
   line-height:1.45;white-space:pre-wrap;font-size:15px;margin-bottom:10px;color:var(--label-2);

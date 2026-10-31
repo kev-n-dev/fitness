@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
@@ -10,9 +10,14 @@ import {
 } from '../lib/measurements.js'
 import { fmtDate, fmtNum, todayISO, uid } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
+import { workoutMediaOf, WORKOUT_MEDIA_MAX } from '../lib/media-refs.js'
+import { addWorkoutMedia } from '../lib/workout-media.js'
+import { syncMedia } from '../lib/media-sync.js'
+import { useMediaPicker } from '../components/CustomMediaField.jsx'
 import LineChart from '../components/LineChart.jsx'
 import Icon from '../components/Icon.jsx'
-import BodyMeasurementMap from '../components/BodyMeasurementMap.jsx'
+import AvatarBuilder from '../components/AvatarBuilder.jsx'
+import { progressPhotosOf, todaysWorkout } from './ProgressPhotos.jsx'
 import { Button, NumberField, Section, Segmented, SelectRow, Switch, TextField } from '../components/ui.jsx'
 import { confirmSheet } from '../sheets.jsx'
 
@@ -155,8 +160,17 @@ export function manageMeasurementsSheet() {
 export default function Measurements() {
   const nav = useNavigate()
   const S = useStore(s => s.S)
+  const updateStore = useStore(s => s.update)
   const [range, setRange] = useState(90)
   const [selectedBodyPart, setSelectedBodyPart] = useState(null)
+  const [viewMode, setViewMode] = useState('avatar') // 'avatar' or 'classic'
+  const fileRef = useRef(null)
+  const { pick, busy, canAdd, showAdd } = useMediaPicker()
+  
+  // Get progress photos for the avatar view
+  const photos = useMemo(() => progressPhotosOf(S), [S.workouts])
+  const today = todaysWorkout(S)
+  
   const available = useMemo(() => {
     const out = enabledMeasurementFields(S)
     for (const field of MEASUREMENT_FIELDS) {
@@ -180,17 +194,6 @@ export default function Measurements() {
   const delta = latest && previous ? Math.round((latest.y - previous.y) * 10) / 10 : null
   const recent = [...S.measurements].reverse()
 
-  // Body map detail panel state
-  const bodyPartField = selectedBodyPart ? MEASUREMENT_FIELDS.find(f => f.key === selectedBodyPart) : null
-  const bodyPartLatest = selectedBodyPart ? latestMeasurement(S, selectedBodyPart) : null
-  const bodyPartPoints = selectedBodyPart ? measurementSeries(S, selectedBodyPart, range) : []
-  const bodyPartAll = selectedBodyPart ? measurementSeries(S, selectedBodyPart) : []
-  const bodyPartPrevious = bodyPartAll.at(-2)
-  const bodyPartDelta = bodyPartLatest && bodyPartPrevious 
-    ? Math.round(((selectedBodyPart === 'bodyFat' ? bodyPartLatest.value : toMeasurementDisplay(bodyPartLatest.value, S.unit)) - bodyPartPrevious.y) * 10) / 10 
-    : null
-  const bodyPartUnit = selectedBodyPart === 'bodyFat' ? '%' : measurementUnit(S.unit)
-
   const handleBodyPartSelect = (partKey) => {
     if (selectedBodyPart === partKey) {
       setSelectedBodyPart(null)
@@ -202,6 +205,36 @@ export default function Measurements() {
       }
     }
   }
+  
+  // Handle adding a photo
+  const handleAddPhoto = async (partKey) => {
+    if (!today) {
+      toast(t('Log a workout today first to add progress photos'))
+      nav('/workout')
+      return
+    }
+    fileRef.current?.click()
+  }
+  
+  const onFile = async (ev) => {
+    const file = ev.target.files && ev.target.files[0]
+    ev.target.value = ''
+    if (!file || !today) return
+    if (workoutMediaOf(today).length >= WORKOUT_MEDIA_MAX) { 
+      toast(t('Up to {0} photos or videos per workout.', WORKOUT_MEDIA_MAX))
+      return 
+    }
+    const got = await pick(file)
+    if (!got) return
+    let res
+    updateStore(s => { res = addWorkoutMedia(s, today, got) })
+    if (res === 'added') { 
+      toast(t('Photo added'))
+      syncMedia({ force: true }) 
+    }
+    else if (res === 'full') toast(t('Up to {0} photos or videos per workout.', WORKOUT_MEDIA_MAX))
+    else if (res === 'gone') toast(t('Workout deleted'))
+  }
 
   const remove = entry => confirmSheet({
     title: t('Delete measurements?'),
@@ -212,96 +245,66 @@ export default function Measurements() {
 
   return <div className="narrow">
     <div className="hdr">
-      <button className="iconbtn" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button>
-      <div style={{ flex: 1, marginLeft: 10 }}><h1>{t('Body measurements')}</h1><div className="sub">{t('Circumference & composition')}</div></div>
+      <button className="iconbtn" onClick={() => nav('/stats')} aria-label={t('Stats')}><Icon name="chevronLeft" /></button>
+      <div style={{ flex: 1, marginLeft: 10 }}>
+        <h1>{t('Body measurements')}</h1>
+        <div className="sub">{t('Track your physique')}</div>
+      </div>
       <button className="iconbtn" onClick={manageMeasurementsSheet} aria-label={t('Choose measurements')}><Icon name="gear" /></button>
     </div>
+    
+    {/* Hidden file input for photo upload */}
+    <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+    
+    {/* View mode toggle */}
+    <Segmented 
+      className="seg-range" 
+      style={{ marginBottom: 16 }}
+      value={viewMode} 
+      onChange={setViewMode}
+      options={[
+        { value: 'avatar', label: t('Avatar') },
+        { value: 'classic', label: t('Charts') },
+      ]} 
+    />
 
-    {/* Interactive body map */}
-    <div className="card">
-      <div className="row between" style={{ marginBottom: 8 }}>
-        <h2 style={{ margin: 0 }}>{t('Body map')}</h2>
-        <Button size="sm" icon="plus" onClick={() => measurementLogSheet()}>{t('Log')}</Button>
-      </div>
-      <div className="muted small" style={{ marginBottom: 12 }}>{t('Tap a body part to see details and track changes.')}</div>
-      
-      <BodyMeasurementMap 
-        S={S} 
+    {viewMode === 'avatar' ? (
+      /* Avatar Builder View */
+      <AvatarBuilder
+        S={S}
         selected={selectedBodyPart}
         onSelect={handleBodyPartSelect}
+        onLog={(partKey) => measurementLogSheet()}
+        onAddPhoto={handleAddPhoto}
+        photos={photos}
       />
-
-      {/* Detail panel for selected body part */}
-      {selectedBodyPart && bodyPartField && (
-        <div className="bmm-detail">
-          <div className="bmm-detail-head">
-            <h3>{t(bodyPartField.label)}</h3>
-            <button className="iconbtn" onClick={() => setSelectedBodyPart(null)} aria-label={t('Close')}>
-              <Icon name="xmark" />
-            </button>
+    ) : (
+      /* Classic Charts View */
+      <>
+        <div className="card">
+          <div className="row between" style={{ marginBottom: 10 }}>
+            <div>
+              <div className="muted small">{field ? t(field.label) : t('Body measurements')}</div>
+              <div className="big" style={{ marginTop: 3 }}>{latest ? <>{fmtNum(latest.y)} <span className="muted" style={{ fontSize: '1rem' }}>{unit}</span></> : '–'}</div>
+              {delta != null && delta !== 0 && <div className="small" style={{ marginTop: 3, color: 'var(--label-2)' }}>{delta > 0 ? '+' : ''}{fmtNum(delta)} {unit} {t('since previous')}</div>}
+            </div>
+            <Button size="sm" icon="plus" onClick={() => measurementLogSheet()}>{t('Log')}</Button>
           </div>
-          
-          {bodyPartLatest ? (
-            <>
-              <div>
-                <span className="bmm-detail-value">
-                  {fmtNum(selectedBodyPart === 'bodyFat' ? bodyPartLatest.value : toMeasurementDisplay(bodyPartLatest.value, S.unit))}
-                </span>
-                <span className="bmm-detail-unit">{bodyPartUnit}</span>
-              </div>
-              {bodyPartDelta != null && bodyPartDelta !== 0 && (
-                <div className={`bmm-detail-change ${bodyPartDelta > 0 ? 'up' : 'down'}`}>
-                  {bodyPartDelta > 0 ? '+' : ''}{fmtNum(bodyPartDelta)} {bodyPartUnit} {t('since previous')}
-                </div>
-              )}
-              <div className="small muted" style={{ marginTop: 4 }}>
-                {t('Last measured {0}', fmtDate(bodyPartLatest.entry.d, true))}
-              </div>
-              
-              {bodyPartPoints.length > 1 && (
-                <div className="bmm-detail-chart">
-                  <LineChart points={bodyPartPoints} h={100} unit={bodyPartUnit} color="var(--teal)" />
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="muted small">{t('No measurements yet. Tap Log to add your first.')}</div>
-          )}
-          
-          <div className="bmm-detail-actions">
-            <Button size="sm" icon="plus" onClick={() => measurementLogSheet()}>{t('Log new')}</Button>
-            {bodyPartLatest && (
-              <Button size="sm" variant="ghost" icon="pencil" onClick={() => measurementLogSheet(bodyPartLatest.entry.d)}>
-                {t('Edit last')}
-              </Button>
-            )}
-          </div>
+          {available.length > 0 && <div className="sect-b measure-select"><SelectRow
+            title={t('Measurement')} sheetTitle={t('Choose measurement')} value={key} onChange={setSelected}
+            options={available.map(f => ({ value: f.key, label: t(f.label) }))} />
+          </div>}
+          <Segmented className="seg-range" value={range} onChange={setRange}
+            options={[{ value: 30, label: '1M' }, { value: 90, label: '3M' }, { value: 365, label: '1Y' }, { value: 0, label: t('All') }]} />
+          <div className="chart"><LineChart points={points} h={170} unit={unit} color="var(--teal)" /></div>
         </div>
-      )}
-    </div>
 
-    <div className="card">
-      <div className="row between" style={{ marginBottom: 10 }}>
-        <div>
-          <div className="muted small">{field ? t(field.label) : t('Body measurements')}</div>
-          <div className="big" style={{ marginTop: 3 }}>{latest ? <>{fmtNum(latest.y)} <span className="muted" style={{ fontSize: '1rem' }}>{unit}</span></> : '–'}</div>
-          {delta != null && delta !== 0 && <div className="small" style={{ marginTop: 3, color: 'var(--label-2)' }}>{delta > 0 ? '+' : ''}{fmtNum(delta)} {unit} {t('since previous')}</div>}
-        </div>
-        <Button size="sm" icon="plus" onClick={() => measurementLogSheet()}>{t('Log')}</Button>
-      </div>
-      {available.length > 0 && <div className="sect-b measure-select"><SelectRow
-        title={t('Measurement')} sheetTitle={t('Choose measurement')} value={key} onChange={setSelected}
-        options={available.map(f => ({ value: f.key, label: t(f.label) }))} />
-      </div>}
-      <Segmented className="seg-range" value={range} onChange={setRange}
-        options={[{ value: 30, label: '1M' }, { value: 90, label: '3M' }, { value: 365, label: '1Y' }, { value: 0, label: t('All') }]} />
-      <div className="chart"><LineChart points={points} h={170} unit={unit} color="var(--teal)" /></div>
-    </div>
-
-    {!available.length && <div className="card">
-      <div className="muted small">{t('Choose the measurements you want to track, then log your first check-in.')}</div>
-      <div style={{ height: 10 }} /><Button onClick={manageMeasurementsSheet}>{t('Choose measurements')}</Button>
-    </div>}
+        {!available.length && <div className="card">
+          <div className="muted small">{t('Choose the measurements you want to track, then log your first check-in.')}</div>
+          <div style={{ height: 10 }} /><Button onClick={manageMeasurementsSheet}>{t('Choose measurements')}</Button>
+        </div>}
+      </>
+    )}
 
     <div className="row between" style={{ margin: '18px 2px 10px' }}>
       <h4 className="sec" style={{ margin: 0 }}>{t('Measurement history')}</h4>
