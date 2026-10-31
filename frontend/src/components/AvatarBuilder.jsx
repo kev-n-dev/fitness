@@ -1,22 +1,72 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BodyChart, ViewSide, MUSCLE_MAP } from 'body-muscles'
 import { t } from '../lib/i18n.js'
 import { 
   MEASUREMENT_FIELDS, measurementUnit, toMeasurementDisplay, latestMeasurement,
-  measurementSeries, measurementValue 
+  measurementSeries 
 } from '../lib/measurements.js'
-import { fmtDate, fmtNum, todayISO } from '../lib/format.js'
-import { workoutMediaOf } from '../lib/media-refs.js'
+import { fmtDate, fmtNum } from '../lib/format.js'
 import { CustomThumb, useMediaUrl } from './CustomMedia.jsx'
 import LineChart from './LineChart.jsx'
 import Icon from './Icon.jsx'
 import { Button } from './ui.jsx'
 
-// Character creation style avatar builder for body measurements.
-// Muscle/body part sizes visually scale based on measurement values.
-// Graph shows progress over time with photo thumbnails on hover.
+// Character creation style body measurement visualizer using body-muscles library.
+// Maps measurement values to muscle intensity for a visually appealing representation.
 
-// Baseline measurements in cm for "average" starting point
-// These are used to calculate scale factors for the avatar
+// Map measurement keys to body-muscles muscle IDs
+// body-muscles has 70+ muscle regions - we map our measurements to relevant muscle groups
+// Front view IDs from muscles.front.js, Back view IDs from muscles.back.js
+const MEASUREMENT_TO_MUSCLES = {
+  neck: ['neck-left', 'neck-right', 'nape'],
+  shoulders: [
+    // Front
+    'shoulder-front-left', 'shoulder-front-right', 'shoulder-side-left', 'shoulder-side-right',
+    // Back
+    'deltoid-rear-left', 'deltoid-rear-right',
+    'traps-upper-left', 'traps-upper-right',
+  ],
+  chest: ['chest-upper-left', 'chest-upper-right', 'chest-lower-left', 'chest-lower-right'],
+  waist: ['obliques-left', 'obliques-right', 'serratus-anterior-left', 'serratus-anterior-right'],
+  abdomen: ['abs-upper-left', 'abs-upper-right', 'abs-lower-left', 'abs-lower-right'],
+  hips: [
+    // Front
+    'hip-flexor-left', 'hip-flexor-right',
+    // Back (glutes)
+    'gluteus-maximus-left', 'gluteus-maximus-right',
+    'gluteus-medius-left', 'gluteus-medius-right',
+  ],
+  upperArmLeft: ['biceps-left', 'triceps-long-left', 'triceps-lateral-left'],
+  upperArmRight: ['biceps-right', 'triceps-long-right', 'triceps-lateral-right'],
+  forearmLeft: ['forearm-left', 'forearm-flexors-left', 'forearm-extensors-left'],
+  forearmRight: ['forearm-right', 'forearm-flexors-right', 'forearm-extensors-right'],
+  thighLeft: [
+    'quads-left', 'adductors-left',
+    'hamstrings-medial-left', 'hamstrings-lateral-left',
+  ],
+  thighRight: [
+    'quads-right', 'adductors-right',
+    'hamstrings-medial-right', 'hamstrings-lateral-right',
+  ],
+  calfLeft: [
+    'tibialis-anterior-left',
+    'calves-gastroc-medial-left', 'calves-gastroc-lateral-left', 'calves-soleus-left',
+  ],
+  calfRight: [
+    'tibialis-anterior-right',
+    'calves-gastroc-medial-right', 'calves-gastroc-lateral-right', 'calves-soleus-right',
+  ],
+}
+
+// Reverse map: muscle ID to measurement key
+const MUSCLE_TO_MEASUREMENT = {}
+for (const [measureKey, muscleIds] of Object.entries(MEASUREMENT_TO_MUSCLES)) {
+  for (const muscleId of muscleIds) {
+    MUSCLE_TO_MEASUREMENT[muscleId] = measureKey
+  }
+}
+
+// Baseline measurements in cm for intensity calculation
 const BASELINE_MEASUREMENTS = {
   neck: 38,
   shoulders: 115,
@@ -28,200 +78,40 @@ const BASELINE_MEASUREMENTS = {
   upperArmRight: 32,
   forearmLeft: 28,
   forearmRight: 28,
-  wristLeft: 17,
-  wristRight: 17,
   thighLeft: 55,
   thighRight: 55,
   calfLeft: 38,
   calfRight: 38,
-  ankleLeft: 22,
-  ankleRight: 22,
 }
 
-// Body part definitions with SVG paths that can be scaled
-// Each part has: key, paths (array of SVG path data), anchor point, scale axis
-const BODY_PARTS = {
-  // Head (static, no scaling)
-  head: {
-    paths: ['M100,25 C115,25 125,40 125,55 C125,75 115,85 100,85 C85,85 75,75 75,55 C75,40 85,25 100,25'],
-    anchor: { x: 100, y: 55 },
-    static: true,
-  },
-  neck: {
-    key: 'neck',
-    paths: ['M90,85 L90,105 L110,105 L110,85'],
-    anchor: { x: 100, y: 95 },
-    scaleX: true,
-  },
-  // Torso
-  shoulders: {
-    key: 'shoulders',
-    paths: ['M55,110 C45,115 40,125 42,135 L60,130 L90,115 L110,115 L140,130 L158,135 C160,125 155,115 145,110 L100,105 Z'],
-    anchor: { x: 100, y: 120 },
-    scaleX: true,
-  },
-  chest: {
-    key: 'chest',
-    paths: [
-      // Left pec
-      'M60,130 C55,145 55,160 65,165 C75,170 85,165 90,155 L90,130 Z',
-      // Right pec  
-      'M140,130 C145,145 145,160 135,165 C125,170 115,165 110,155 L110,130 Z',
-    ],
-    anchor: { x: 100, y: 145 },
-    scaleX: true,
-    scaleY: true,
-  },
-  waist: {
-    key: 'waist',
-    paths: ['M70,175 C65,190 65,205 70,215 L130,215 C135,205 135,190 130,175 L110,170 L90,170 Z'],
-    anchor: { x: 100, y: 195 },
-    scaleX: true,
-  },
-  abdomen: {
-    key: 'abdomen',
-    paths: [
-      // Abs definition
-      'M85,175 L85,210 L95,210 L95,175 Z',
-      'M105,175 L105,210 L115,210 L115,175 Z',
-    ],
-    anchor: { x: 100, y: 192 },
-    scaleX: true,
-  },
-  hips: {
-    key: 'hips',
-    paths: ['M70,215 C60,235 58,250 65,260 L135,260 C142,250 140,235 130,215 Z'],
-    anchor: { x: 100, y: 238 },
-    scaleX: true,
-  },
-  // Arms
-  upperArmLeft: {
-    key: 'upperArmLeft',
-    paths: ['M42,135 C30,145 25,165 30,185 L50,180 C48,165 50,150 55,140 Z'],
-    anchor: { x: 40, y: 160 },
-    scaleX: true,
-    scaleY: true,
-  },
-  upperArmRight: {
-    key: 'upperArmRight',
-    paths: ['M158,135 C170,145 175,165 170,185 L150,180 C152,165 150,150 145,140 Z'],
-    anchor: { x: 160, y: 160 },
-    scaleX: true,
-    scaleY: true,
-  },
-  forearmLeft: {
-    key: 'forearmLeft',
-    paths: ['M30,185 C25,210 22,235 25,255 L42,252 C45,235 48,215 50,195 Z'],
-    anchor: { x: 35, y: 220 },
-    scaleX: true,
-  },
-  forearmRight: {
-    key: 'forearmRight',
-    paths: ['M170,185 C175,210 178,235 175,255 L158,252 C155,235 152,215 150,195 Z'],
-    anchor: { x: 165, y: 220 },
-    scaleX: true,
-  },
-  // Hands (static)
-  handLeft: {
-    paths: ['M25,255 C20,265 18,280 22,290 C28,295 38,292 42,285 L42,252 Z'],
-    anchor: { x: 30, y: 272 },
-    static: true,
-  },
-  handRight: {
-    paths: ['M175,255 C180,265 182,280 178,290 C172,295 162,292 158,285 L158,252 Z'],
-    anchor: { x: 170, y: 272 },
-    static: true,
-  },
-  // Legs
-  thighLeft: {
-    key: 'thighLeft',
-    paths: ['M65,260 C55,290 52,320 55,350 L80,348 C85,320 82,295 80,270 Z'],
-    anchor: { x: 68, y: 305 },
-    scaleX: true,
-    scaleY: true,
-  },
-  thighRight: {
-    key: 'thighRight',
-    paths: ['M135,260 C145,290 148,320 145,350 L120,348 C115,320 118,295 120,270 Z'],
-    anchor: { x: 132, y: 305 },
-    scaleX: true,
-    scaleY: true,
-  },
-  calfLeft: {
-    key: 'calfLeft',
-    paths: ['M55,350 C48,380 45,410 50,435 L72,432 C78,408 80,380 80,355 Z'],
-    anchor: { x: 62, y: 392 },
-    scaleX: true,
-  },
-  calfRight: {
-    key: 'calfRight',
-    paths: ['M145,350 C152,380 155,410 150,435 L128,432 C122,408 120,380 120,355 Z'],
-    anchor: { x: 138, y: 392 },
-    scaleX: true,
-  },
-  // Feet (static)
-  footLeft: {
-    paths: ['M50,435 L45,460 L75,460 L72,435 Z'],
-    anchor: { x: 60, y: 447 },
-    static: true,
-  },
-  footRight: {
-    paths: ['M150,435 L155,460 L125,460 L128,435 Z'],
-    anchor: { x: 140, y: 447 },
-    static: true,
-  },
+// Convert measurement value to intensity (0-10)
+// Higher intensity = bigger muscles = more developed
+function measurementToIntensity(value, baseline) {
+  if (value == null || baseline == null) return 0
+  // Scale: at baseline = 5, below = lower, above = higher
+  const ratio = value / baseline
+  return Math.max(0, Math.min(10, Math.round(ratio * 5)))
 }
 
-// Calculate scale factor based on measurement vs baseline
-function getScaleFactor(measurement, baseline) {
-  if (!measurement || !baseline) return 1
-  // Scale between 0.7 and 1.5 based on how far from baseline
-  const ratio = measurement / baseline
-  return Math.max(0.7, Math.min(1.5, 0.5 + ratio * 0.5))
-}
-
-// Get color based on muscle group
-function getPartColor(key, selected) {
-  if (selected) return 'var(--acc)'
-  // Color by body region
-  if (['chest', 'upperArmLeft', 'upperArmRight'].includes(key)) return 'var(--teal)'
-  if (['shoulders', 'forearmLeft', 'forearmRight'].includes(key)) return 'color-mix(in srgb, var(--teal) 80%, var(--surface))'
-  if (['thighLeft', 'thighRight', 'calfLeft', 'calfRight'].includes(key)) return 'var(--blue)'
-  if (['waist', 'abdomen', 'hips'].includes(key)) return 'color-mix(in srgb, var(--orange) 60%, var(--surface))'
-  if (key === 'neck') return 'color-mix(in srgb, var(--label) 30%, var(--surface))'
-  return 'var(--surface-2)'
-}
-
-function BodyPart({ partKey, part, scale, selected, onSelect, measurements }) {
-  const scaleX = part.scaleX ? scale : 1
-  const scaleY = part.scaleY ? scale : 1
-  const transform = part.static ? '' : `translate(${part.anchor.x}px, ${part.anchor.y}px) scale(${scaleX}, ${scaleY}) translate(${-part.anchor.x}px, ${-part.anchor.y}px)`
+// Build body state for the chart based on measurements
+function buildBodyState(measurements, selected) {
+  const bodyState = {}
   
-  const value = part.key && measurements[part.key]
-  const hasValue = value != null
+  for (const [measureKey, muscleIds] of Object.entries(MEASUREMENT_TO_MUSCLES)) {
+    const value = measurements.raw[measureKey]
+    const baseline = BASELINE_MEASUREMENTS[measureKey]
+    const intensity = measurementToIntensity(value, baseline)
+    const isSelected = selected === measureKey
+    
+    for (const muscleId of muscleIds) {
+      bodyState[muscleId] = {
+        intensity: value != null ? intensity : 0,
+        selected: isSelected,
+      }
+    }
+  }
   
-  return (
-    <g
-      className={`avatar-part${selected ? ' selected' : ''}${hasValue ? ' has-value' : ''}`}
-      style={{ transform, transformOrigin: `${part.anchor.x}px ${part.anchor.y}px` }}
-      onClick={part.key ? () => onSelect(part.key) : undefined}
-      role={part.key ? 'button' : undefined}
-      tabIndex={part.key ? 0 : undefined}
-      onKeyDown={part.key ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(part.key) } } : undefined}
-      aria-label={part.key ? t(MEASUREMENT_FIELDS.find(f => f.key === part.key)?.label || part.key) : undefined}
-    >
-      {part.paths.map((d, i) => (
-        <path
-          key={i}
-          d={d}
-          fill={getPartColor(partKey, selected)}
-          stroke="var(--surface)"
-          strokeWidth="1.5"
-          className="avatar-path"
-        />
-      ))}
-    </g>
-  )
+  return bodyState
 }
 
 function PhotoTooltip({ photo, x, y }) {
@@ -300,8 +190,6 @@ function ProgressGraph({ S, selectedPart, range, onHoverPoint, photos }) {
         h={140} 
         unit={unit} 
         color="var(--acc)"
-        dotRadius={p => p.hasPhoto ? 6 : 3}
-        dotColor={p => p.hasPhoto ? 'var(--yellow)' : undefined}
       />
       {Object.keys(photosAtPoints).length > 0 && (
         <div className="avatar-graph-hint">
@@ -312,7 +200,7 @@ function ProgressGraph({ S, selectedPart, range, onHoverPoint, photos }) {
   )
 }
 
-function MeasurementPanel({ S, selectedPart, onLog, onAddPhoto, photos }) {
+function MeasurementPanel({ S, selectedPart, onLog, onAddPhoto, photos, onClear }) {
   const field = selectedPart ? MEASUREMENT_FIELDS.find(f => f.key === selectedPart) : null
   const latest = selectedPart ? latestMeasurement(S, selectedPart) : null
   const unit = selectedPart === 'bodyFat' ? '%' : measurementUnit(S.unit)
@@ -337,8 +225,8 @@ function MeasurementPanel({ S, selectedPart, onLog, onAddPhoto, photos }) {
     return (
       <div className="avatar-panel-empty">
         <div className="avatar-panel-icon"><Icon name="figureStrength" /></div>
-        <h3>{t('Your Body Avatar')}</h3>
-        <p>{t('Tap any body part to see measurements and track progress over time.')}</p>
+        <h3>{t('Your Body')}</h3>
+        <p>{t('Tap any muscle group to see measurements and track progress.')}</p>
         <Button icon="plus" onClick={() => onLog()}>{t('Log measurements')}</Button>
       </div>
     )
@@ -348,7 +236,9 @@ function MeasurementPanel({ S, selectedPart, onLog, onAddPhoto, photos }) {
     <div className="avatar-panel">
       <div className="avatar-panel-header">
         <h3>{field ? t(field.label) : selectedPart}</h3>
-        <Button size="sm" icon="plus" onClick={() => onLog(selectedPart)}>{t('Update')}</Button>
+        <button className="iconbtn" onClick={onClear} aria-label={t('Close')}>
+          <Icon name="xmark" />
+        </button>
       </div>
       
       {latest ? (
@@ -395,26 +285,83 @@ function MeasurementPanel({ S, selectedPart, onLog, onAddPhoto, photos }) {
       )}
       
       <div className="avatar-panel-actions">
+        <Button size="sm" icon="plus" onClick={() => onLog(selectedPart)}>{t('Update')}</Button>
         <Button size="sm" variant="ghost" icon="camera" onClick={() => onAddPhoto(selectedPart)}>
-          {t('Add photo')}
+          {t('Photo')}
         </Button>
       </div>
     </div>
   )
 }
 
+function BodyMapView({ measurements, selected, onSelect, view }) {
+  const containerRef = useRef(null)
+  const chartRef = useRef(null)
+  
+  const bodyState = useMemo(() => 
+    buildBodyState(measurements, selected), 
+    [measurements, selected]
+  )
+  
+  useEffect(() => {
+    if (!containerRef.current) return
+    
+    // Destroy previous chart if exists
+    if (chartRef.current) {
+      chartRef.current.destroy()
+    }
+    
+    // Create new chart
+    chartRef.current = new BodyChart(containerRef.current, {
+      view: view === 'back' ? ViewSide.BACK : ViewSide.FRONT,
+      bodyState,
+      showViewLabel: false,
+      enableTransitions: true,
+      className: 'body-muscles-chart',
+      onMuscleClick: (muscleId, muscleName) => {
+        const measureKey = MUSCLE_TO_MEASUREMENT[muscleId]
+        if (measureKey) {
+          onSelect(measureKey)
+        }
+      },
+      onMuscleHover: (muscleId) => {
+        // Could add hover effects here
+      },
+    })
+    
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy()
+        chartRef.current = null
+      }
+    }
+  }, [view])
+  
+  // Update body state when measurements or selection changes
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.update({ bodyState })
+    }
+  }, [bodyState])
+  
+  return (
+    <div ref={containerRef} className="body-map-container" />
+  )
+}
+
 /**
- * Character creator-style avatar that shows body measurements.
- * Muscle/body part sizes scale based on measurement values.
+ * Character creation-style avatar for body measurements.
+ * Uses body-muscles library for professional anatomical visualization.
  */
 export default function AvatarBuilder({ S, selected, onSelect, onLog, onAddPhoto, photos = [] }) {
   const [hoverPhoto, setHoverPhoto] = useState(null)
   const [range, setRange] = useState(90)
+  const [view, setView] = useState('front') // 'front' or 'back'
   
-  // Calculate current measurement values and scale factors
+  // Calculate current measurement values
   const measurements = useMemo(() => {
     const values = {}
-    const scales = {}
+    const raw = {}
     
     for (const field of MEASUREMENT_FIELDS) {
       const latest = latestMeasurement(S, field.key)
@@ -423,57 +370,51 @@ export default function AvatarBuilder({ S, selected, onSelect, onLog, onAddPhoto
           ? latest.value 
           : toMeasurementDisplay(latest.value, S.unit)
         values[field.key] = displayValue
-        
-        // Calculate scale factor
-        const baseline = BASELINE_MEASUREMENTS[field.key]
-        if (baseline) {
-          // Use raw cm value for scaling calculation
-          scales[field.key] = getScaleFactor(latest.value, baseline)
-        }
+        raw[field.key] = latest.value // Keep raw cm value for intensity calculation
       }
     }
     
-    return { values, scales }
+    return { values, raw }
   }, [S])
+  
+  const handleClearSelection = useCallback(() => {
+    onSelect(null)
+  }, [onSelect])
   
   return (
     <div className="avatar-builder">
       <div className="avatar-main">
-        {/* Avatar view */}
-        <div className="avatar-view">
-          <svg viewBox="0 0 200 480" className="avatar-svg">
-            {/* Background gradient for depth */}
-            <defs>
-              <radialGradient id="bodyGlow" cx="50%" cy="30%" r="70%">
-                <stop offset="0%" stopColor="var(--acc)" stopOpacity="0.1" />
-                <stop offset="100%" stopColor="var(--surface)" stopOpacity="0" />
-              </radialGradient>
-            </defs>
-            <ellipse cx="100" cy="200" rx="80" ry="180" fill="url(#bodyGlow)" />
-            
-            {/* Body parts in layered order (back to front) */}
-            {Object.entries(BODY_PARTS).map(([key, part]) => (
-              <BodyPart
-                key={key}
-                partKey={key}
-                part={part}
-                scale={measurements.scales[part.key] || 1}
-                selected={selected === part.key}
-                onSelect={onSelect}
-                measurements={measurements.values}
-              />
-            ))}
-          </svg>
+        {/* Body visualization */}
+        <div className="avatar-body-section">
+          {/* View toggle */}
+          <div className="avatar-view-toggle">
+            <button 
+              className={`avatar-view-btn${view === 'front' ? ' active' : ''}`}
+              onClick={() => setView('front')}
+            >
+              {t('Front')}
+            </button>
+            <button 
+              className={`avatar-view-btn${view === 'back' ? ' active' : ''}`}
+              onClick={() => setView('back')}
+            >
+              {t('Back')}
+            </button>
+          </div>
           
-          {/* Stats overlay */}
-          {selected && measurements.values[selected] && (
-            <div className="avatar-stat-overlay">
-              <span className="avatar-stat-value">{fmtNum(measurements.values[selected])}</span>
-              <span className="avatar-stat-unit">
-                {selected === 'bodyFat' ? '%' : measurementUnit(S.unit)}
-              </span>
-            </div>
-          )}
+          <BodyMapView
+            measurements={measurements}
+            selected={selected}
+            onSelect={onSelect}
+            view={view}
+          />
+          
+          {/* Intensity legend */}
+          <div className="avatar-legend">
+            <span className="avatar-legend-label">{t('Less developed')}</span>
+            <div className="avatar-legend-gradient" />
+            <span className="avatar-legend-label">{t('More developed')}</span>
+          </div>
         </div>
         
         {/* Measurement panel */}
@@ -483,6 +424,7 @@ export default function AvatarBuilder({ S, selected, onSelect, onLog, onAddPhoto
           onLog={onLog}
           onAddPhoto={onAddPhoto}
           photos={photos}
+          onClear={handleClearSelection}
         />
       </div>
       
