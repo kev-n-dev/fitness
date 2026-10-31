@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BodyChart, ViewSide, MUSCLE_MAP } from 'body-muscles'
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { t } from '../lib/i18n.js'
 import { 
   MEASUREMENT_FIELDS, measurementUnit, toMeasurementDisplay, latestMeasurement,
@@ -11,107 +10,30 @@ import LineChart from './LineChart.jsx'
 import Icon from './Icon.jsx'
 import { Button } from './ui.jsx'
 
-// Character creation style body measurement visualizer using body-muscles library.
-// Maps measurement values to muscle intensity for a visually appealing representation.
+// Lazy load the 3D visualizer to avoid blocking initial render
+const BodyVisualizer3D = lazy(() => import('./BodyVisualizer3D.jsx'))
 
-// Map measurement keys to body-muscles muscle IDs
-// body-muscles has 70+ muscle regions - we map our measurements to relevant muscle groups
-// Front view IDs from muscles.front.js, Back view IDs from muscles.back.js
-const MEASUREMENT_TO_MUSCLES = {
-  neck: ['neck-left', 'neck-right', 'nape'],
-  shoulders: [
-    // Front
-    'shoulder-front-left', 'shoulder-front-right', 'shoulder-side-left', 'shoulder-side-right',
-    // Back
-    'deltoid-rear-left', 'deltoid-rear-right',
-    'traps-upper-left', 'traps-upper-right',
-  ],
-  chest: ['chest-upper-left', 'chest-upper-right', 'chest-lower-left', 'chest-lower-right'],
-  waist: ['obliques-left', 'obliques-right', 'serratus-anterior-left', 'serratus-anterior-right'],
-  abdomen: ['abs-upper-left', 'abs-upper-right', 'abs-lower-left', 'abs-lower-right'],
-  hips: [
-    // Front
-    'hip-flexor-left', 'hip-flexor-right',
-    // Back (glutes)
-    'gluteus-maximus-left', 'gluteus-maximus-right',
-    'gluteus-medius-left', 'gluteus-medius-right',
-  ],
-  upperArmLeft: ['biceps-left', 'triceps-long-left', 'triceps-lateral-left'],
-  upperArmRight: ['biceps-right', 'triceps-long-right', 'triceps-lateral-right'],
-  forearmLeft: ['forearm-left', 'forearm-flexors-left', 'forearm-extensors-left'],
-  forearmRight: ['forearm-right', 'forearm-flexors-right', 'forearm-extensors-right'],
-  thighLeft: [
-    'quads-left', 'adductors-left',
-    'hamstrings-medial-left', 'hamstrings-lateral-left',
-  ],
-  thighRight: [
-    'quads-right', 'adductors-right',
-    'hamstrings-medial-right', 'hamstrings-lateral-right',
-  ],
-  calfLeft: [
-    'tibialis-anterior-left',
-    'calves-gastroc-medial-left', 'calves-gastroc-lateral-left', 'calves-soleus-left',
-  ],
-  calfRight: [
-    'tibialis-anterior-right',
-    'calves-gastroc-medial-right', 'calves-gastroc-lateral-right', 'calves-soleus-right',
-  ],
-}
-
-// Reverse map: muscle ID to measurement key
-const MUSCLE_TO_MEASUREMENT = {}
-for (const [measureKey, muscleIds] of Object.entries(MEASUREMENT_TO_MUSCLES)) {
-  for (const muscleId of muscleIds) {
-    MUSCLE_TO_MEASUREMENT[muscleId] = measureKey
-  }
-}
-
-// Baseline measurements in cm for intensity calculation
-const BASELINE_MEASUREMENTS = {
-  neck: 38,
-  shoulders: 115,
-  chest: 100,
-  waist: 85,
-  abdomen: 88,
-  hips: 100,
-  upperArmLeft: 32,
-  upperArmRight: 32,
-  forearmLeft: 28,
-  forearmRight: 28,
-  thighLeft: 55,
-  thighRight: 55,
-  calfLeft: 38,
-  calfRight: 38,
-}
-
-// Convert measurement value to intensity (0-10)
-// Higher intensity = bigger muscles = more developed
-function measurementToIntensity(value, baseline) {
-  if (value == null || baseline == null) return 0
-  // Scale: at baseline = 5, below = lower, above = higher
-  const ratio = value / baseline
-  return Math.max(0, Math.min(10, Math.round(ratio * 5)))
-}
-
-// Build body state for the chart based on measurements
-function buildBodyState(measurements, selected) {
-  const bodyState = {}
-  
-  for (const [measureKey, muscleIds] of Object.entries(MEASUREMENT_TO_MUSCLES)) {
-    const value = measurements.raw[measureKey]
-    const baseline = BASELINE_MEASUREMENTS[measureKey]
-    const intensity = measurementToIntensity(value, baseline)
-    const isSelected = selected === measureKey
-    
-    for (const muscleId of muscleIds) {
-      bodyState[muscleId] = {
-        intensity: value != null ? intensity : 0,
-        selected: isSelected,
-      }
-    }
-  }
-  
-  return bodyState
+// Fallback 2D silhouette while 3D loads or if WebGL unavailable
+function BodySilhouette({ measurements }) {
+  return (
+    <div className="body-silhouette">
+      <svg viewBox="0 0 100 200" className="body-silhouette-svg">
+        {/* Simple human silhouette */}
+        <ellipse cx="50" cy="20" rx="12" ry="15" fill="var(--surface-3)" />
+        <path
+          d="M50 35 L50 90 M30 50 L70 50 M50 90 L35 150 M50 90 L65 150 M35 150 L30 190 M65 150 L70 190"
+          stroke="var(--surface-3)"
+          strokeWidth="8"
+          strokeLinecap="round"
+          fill="none"
+        />
+      </svg>
+      <div className="body-silhouette-loading">
+        <div className="body-3d-spinner" />
+        <span>{t('Loading 3D model...')}</span>
+      </div>
+    </div>
+  )
 }
 
 function PhotoTooltip({ photo, x, y }) {
@@ -226,7 +148,7 @@ function MeasurementPanel({ S, selectedPart, onLog, onAddPhoto, photos, onClear 
       <div className="avatar-panel-empty">
         <div className="avatar-panel-icon"><Icon name="figureStrength" /></div>
         <h3>{t('Your Body')}</h3>
-        <p>{t('Tap any muscle group to see measurements and track progress.')}</p>
+        <p>{t('Track your body measurements and see your progress visualized in 3D.')}</p>
         <Button icon="plus" onClick={() => onLog()}>{t('Log measurements')}</Button>
       </div>
     )
@@ -294,69 +216,87 @@ function MeasurementPanel({ S, selectedPart, onLog, onAddPhoto, photos, onClear 
   )
 }
 
-function BodyMapView({ measurements, selected, onSelect, view }) {
-  const containerRef = useRef(null)
-  const chartRef = useRef(null)
-  
-  const bodyState = useMemo(() => 
-    buildBodyState(measurements, selected), 
-    [measurements, selected]
-  )
-  
-  useEffect(() => {
-    if (!containerRef.current) return
+// Quick measurement buttons for selecting body parts
+function MeasurementQuickSelect({ selected, onSelect, measurements }) {
+  const groups = useMemo(() => {
+    const torso = ['chest', 'waist', 'hips', 'shoulders', 'neck', 'abdomen']
+    const arms = ['upperArmLeft', 'upperArmRight', 'forearmLeft', 'forearmRight']
+    const legs = ['thighLeft', 'thighRight', 'calfLeft', 'calfRight']
     
-    // Destroy previous chart if exists
-    if (chartRef.current) {
-      chartRef.current.destroy()
-    }
-    
-    // Create new chart
-    chartRef.current = new BodyChart(containerRef.current, {
-      view: view === 'back' ? ViewSide.BACK : ViewSide.FRONT,
-      bodyState,
-      showViewLabel: false,
-      enableTransitions: true,
-      className: 'body-muscles-chart',
-      onMuscleClick: (muscleId, muscleName) => {
-        const measureKey = MUSCLE_TO_MEASUREMENT[muscleId]
-        if (measureKey) {
-          onSelect(measureKey)
-        }
-      },
-      onMuscleHover: (muscleId) => {
-        // Could add hover effects here
-      },
-    })
-    
-    return () => {
-      if (chartRef.current) {
-        chartRef.current.destroy()
-        chartRef.current = null
-      }
-    }
-  }, [view])
-  
-  // Update body state when measurements or selection changes
-  useEffect(() => {
-    if (chartRef.current) {
-      chartRef.current.update({ bodyState })
-    }
-  }, [bodyState])
+    return { torso, arms, legs }
+  }, [])
   
   return (
-    <div ref={containerRef} className="body-map-container" />
+    <div className="avatar-quick-select">
+      <div className="avatar-quick-group">
+        <span className="avatar-quick-label">{t('Torso')}</span>
+        <div className="avatar-quick-btns">
+          {groups.torso.map(key => {
+            const field = MEASUREMENT_FIELDS.find(f => f.key === key)
+            if (!field) return null
+            const hasValue = measurements.raw[key] != null
+            return (
+              <button
+                key={key}
+                className={`avatar-quick-btn${selected === key ? ' active' : ''}${hasValue ? ' has-value' : ''}`}
+                onClick={() => onSelect(selected === key ? null : key)}
+              >
+                {t(field.label)}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div className="avatar-quick-group">
+        <span className="avatar-quick-label">{t('Arms')}</span>
+        <div className="avatar-quick-btns">
+          {groups.arms.map(key => {
+            const field = MEASUREMENT_FIELDS.find(f => f.key === key)
+            if (!field) return null
+            const hasValue = measurements.raw[key] != null
+            return (
+              <button
+                key={key}
+                className={`avatar-quick-btn${selected === key ? ' active' : ''}${hasValue ? ' has-value' : ''}`}
+                onClick={() => onSelect(selected === key ? null : key)}
+              >
+                {t(field.label)}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div className="avatar-quick-group">
+        <span className="avatar-quick-label">{t('Legs')}</span>
+        <div className="avatar-quick-btns">
+          {groups.legs.map(key => {
+            const field = MEASUREMENT_FIELDS.find(f => f.key === key)
+            if (!field) return null
+            const hasValue = measurements.raw[key] != null
+            return (
+              <button
+                key={key}
+                className={`avatar-quick-btn${selected === key ? ' active' : ''}${hasValue ? ' has-value' : ''}`}
+                onClick={() => onSelect(selected === key ? null : key)}
+              >
+                {t(field.label)}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
   )
 }
 
 /**
  * Character creation-style avatar for body measurements.
- * Uses body-muscles library for professional anatomical visualization.
+ * Uses OxiHuman 3D body visualizer for realistic body representation.
  */
 export default function AvatarBuilder({ S, selected, onSelect, onLog, onAddPhoto, photos = [] }) {
   const [hoverPhoto, setHoverPhoto] = useState(null)
   const [range, setRange] = useState(90)
-  const [view, setView] = useState('front') // 'front' or 'back'
+  const [modelReady, setModelReady] = useState(false)
   
   // Calculate current measurement values
   const measurements = useMemo(() => {
@@ -370,9 +310,13 @@ export default function AvatarBuilder({ S, selected, onSelect, onLog, onAddPhoto
           ? latest.value 
           : toMeasurementDisplay(latest.value, S.unit)
         values[field.key] = displayValue
-        raw[field.key] = latest.value // Keep raw cm value for intensity calculation
+        raw[field.key] = latest.value // Keep raw cm value for 3D model
       }
     }
+    
+    // Also get height and weight from profile for 3D model
+    if (S.height) raw.height = S.height
+    if (S.weight) raw.weight = S.weight
     
     return { values, raw }
   }, [S])
@@ -381,40 +325,28 @@ export default function AvatarBuilder({ S, selected, onSelect, onLog, onAddPhoto
     onSelect(null)
   }, [onSelect])
   
+  const handleModelReady = useCallback(() => {
+    setModelReady(true)
+  }, [])
+  
   return (
     <div className="avatar-builder">
       <div className="avatar-main">
-        {/* Body visualization */}
-        <div className="avatar-body-section">
-          {/* View toggle */}
-          <div className="avatar-view-toggle">
-            <button 
-              className={`avatar-view-btn${view === 'front' ? ' active' : ''}`}
-              onClick={() => setView('front')}
-            >
-              {t('Front')}
-            </button>
-            <button 
-              className={`avatar-view-btn${view === 'back' ? ' active' : ''}`}
-              onClick={() => setView('back')}
-            >
-              {t('Back')}
-            </button>
-          </div>
+        {/* 3D Body visualization */}
+        <div className="avatar-body-section avatar-body-3d">
+          <Suspense fallback={<BodySilhouette measurements={measurements} />}>
+            <BodyVisualizer3D 
+              measurements={measurements.raw} 
+              onReady={handleModelReady}
+            />
+          </Suspense>
           
-          <BodyMapView
-            measurements={measurements}
+          {/* Measurement quick select buttons */}
+          <MeasurementQuickSelect
             selected={selected}
             onSelect={onSelect}
-            view={view}
+            measurements={measurements}
           />
-          
-          {/* Intensity legend */}
-          <div className="avatar-legend">
-            <span className="avatar-legend-label">{t('Less developed')}</span>
-            <div className="avatar-legend-gradient" />
-            <span className="avatar-legend-label">{t('More developed')}</span>
-          </div>
         </div>
         
         {/* Measurement panel */}

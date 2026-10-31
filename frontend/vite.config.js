@@ -116,5 +116,9 @@ export default defineConfig({
       } : {})
     }
   },
-  build: { chunkSizeWarningLimit: 1500 }
+  build: { chunkSizeWarningLimit: 1500 },
+  // Support for WASM modules (oxihuman-wasm)
+  optimizeDeps: {
+    exclude: ['oxihuman-wasm']
+  }
 })
