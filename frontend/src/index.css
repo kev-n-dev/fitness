@@ -651,6 +651,40 @@ body.chips-dragging *{cursor:inherit}
 .measure-home-grid b{display:block;font-size:16px;margin:3px 0;white-space:nowrap}
 .measure-empty{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;color:var(--label-2);font-size:13px;gap:10px}
 .measure-empty .icn{flex:none}
+
+/* --- body measurement map --- */
+.body-measurement-map{padding:8px 0}
+.bmm-container{display:flex;gap:8px;justify-content:center}
+.bmm-side{flex:1;max-width:180px;text-align:center}
+.bmm-label{font-size:11px;color:var(--label-2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+.bmm-view{width:100%;height:auto;max-height:380px}
+.bmm-silhouette{transition:fill var(--med)}
+.bmm-guide{pointer-events:none}
+.bmm-point{transition:transform var(--fast)}
+.bmm-point:hover,.bmm-point:focus{outline:none}
+.bmm-point:focus .bmm-target{stroke:var(--label);stroke-width:3}
+.bmm-point .bmm-target{transition:all var(--fast)}
+.bmm-point.selected .bmm-target{filter:drop-shadow(0 0 6px var(--acc))}
+.bmm-value{font-family:var(--ff);pointer-events:none}
+.bmm-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:12px;font-size:11px;color:var(--label-2)}
+.bmm-legend-item{display:flex;align-items:center;gap:5px}
+.bmm-dot{width:10px;height:10px;border-radius:50%;background:var(--surface-2);border:2px solid var(--sep)}
+.bmm-dot.has-value{background:var(--acc);border-color:var(--acc)}
+.bmm-dot.change-up{background:var(--green);border-color:var(--green)}
+.bmm-dot.change-down{background:var(--orange);border-color:var(--orange)}
+
+/* Measurement detail panel shown when a point is selected */
+.bmm-detail{background:var(--surface-2);border-radius:var(--r);padding:14px;margin-top:12px}
+.bmm-detail-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.bmm-detail-head h3{margin:0;font-size:16px;font-weight:600}
+.bmm-detail-value{font-size:28px;font-weight:600;letter-spacing:-.02em}
+.bmm-detail-unit{font-size:14px;color:var(--label-2);margin-left:4px}
+.bmm-detail-change{font-size:13px;margin-top:4px}
+.bmm-detail-change.up{color:var(--green)}
+.bmm-detail-change.down{color:var(--orange)}
+.bmm-detail-chart{margin-top:12px}
+.bmm-detail-actions{display:flex;gap:8px;margin-top:12px}
+
 .exnote{
   background:var(--surface);border-radius:var(--r);padding:13px 15px;
   line-height:1.45;white-space:pre-wrap;font-size:15px;margin-bottom:10px;color:var(--label-2);

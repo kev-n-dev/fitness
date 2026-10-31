@@ -6,12 +6,13 @@ import {
   MEASUREMENT_FIELDS, MEASUREMENT_KEYS, emptyMeasurement, enabledMeasurementFields,
   fromMeasurementDisplay, latestMeasurement, measurementEntryHasValues,
   measurementSeries, measurementUnit, measurementValue, normalizeMeasurementEntry,
-  toMeasurementDisplay, normalizeMeasurementsState,
+  toMeasurementDisplay, normalizeMeasurementsState, measurementLabel,
 } from '../lib/measurements.js'
 import { fmtDate, fmtNum, todayISO, uid } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
 import LineChart from '../components/LineChart.jsx'
 import Icon from '../components/Icon.jsx'
+import BodyMeasurementMap from '../components/BodyMeasurementMap.jsx'
 import { Button, NumberField, Section, Segmented, SelectRow, Switch, TextField } from '../components/ui.jsx'
 import { confirmSheet } from '../sheets.jsx'
 
@@ -155,6 +156,7 @@ export default function Measurements() {
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const [range, setRange] = useState(90)
+  const [selectedBodyPart, setSelectedBodyPart] = useState(null)
   const available = useMemo(() => {
     const out = enabledMeasurementFields(S)
     for (const field of MEASUREMENT_FIELDS) {
@@ -178,6 +180,29 @@ export default function Measurements() {
   const delta = latest && previous ? Math.round((latest.y - previous.y) * 10) / 10 : null
   const recent = [...S.measurements].reverse()
 
+  // Body map detail panel state
+  const bodyPartField = selectedBodyPart ? MEASUREMENT_FIELDS.find(f => f.key === selectedBodyPart) : null
+  const bodyPartLatest = selectedBodyPart ? latestMeasurement(S, selectedBodyPart) : null
+  const bodyPartPoints = selectedBodyPart ? measurementSeries(S, selectedBodyPart, range) : []
+  const bodyPartAll = selectedBodyPart ? measurementSeries(S, selectedBodyPart) : []
+  const bodyPartPrevious = bodyPartAll.at(-2)
+  const bodyPartDelta = bodyPartLatest && bodyPartPrevious 
+    ? Math.round(((selectedBodyPart === 'bodyFat' ? bodyPartLatest.value : toMeasurementDisplay(bodyPartLatest.value, S.unit)) - bodyPartPrevious.y) * 10) / 10 
+    : null
+  const bodyPartUnit = selectedBodyPart === 'bodyFat' ? '%' : measurementUnit(S.unit)
+
+  const handleBodyPartSelect = (partKey) => {
+    if (selectedBodyPart === partKey) {
+      setSelectedBodyPart(null)
+    } else {
+      setSelectedBodyPart(partKey)
+      // Also update the main chart selection
+      if (available.some(f => f.key === partKey)) {
+        setSelected(partKey)
+      }
+    }
+  }
+
   const remove = entry => confirmSheet({
     title: t('Delete measurements?'),
     message: t('Deletes the measurements logged on {0}.', fmtDate(entry.d, true)),
@@ -190,6 +215,69 @@ export default function Measurements() {
       <button className="iconbtn" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button>
       <div style={{ flex: 1, marginLeft: 10 }}><h1>{t('Body measurements')}</h1><div className="sub">{t('Circumference & composition')}</div></div>
       <button className="iconbtn" onClick={manageMeasurementsSheet} aria-label={t('Choose measurements')}><Icon name="gear" /></button>
+    </div>
+
+    {/* Interactive body map */}
+    <div className="card">
+      <div className="row between" style={{ marginBottom: 8 }}>
+        <h2 style={{ margin: 0 }}>{t('Body map')}</h2>
+        <Button size="sm" icon="plus" onClick={() => measurementLogSheet()}>{t('Log')}</Button>
+      </div>
+      <div className="muted small" style={{ marginBottom: 12 }}>{t('Tap a body part to see details and track changes.')}</div>
+      
+      <BodyMeasurementMap 
+        S={S} 
+        selected={selectedBodyPart}
+        onSelect={handleBodyPartSelect}
+      />
+
+      {/* Detail panel for selected body part */}
+      {selectedBodyPart && bodyPartField && (
+        <div className="bmm-detail">
+          <div className="bmm-detail-head">
+            <h3>{t(bodyPartField.label)}</h3>
+            <button className="iconbtn" onClick={() => setSelectedBodyPart(null)} aria-label={t('Close')}>
+              <Icon name="xmark" />
+            </button>
+          </div>
+          
+          {bodyPartLatest ? (
+            <>
+              <div>
+                <span className="bmm-detail-value">
+                  {fmtNum(selectedBodyPart === 'bodyFat' ? bodyPartLatest.value : toMeasurementDisplay(bodyPartLatest.value, S.unit))}
+                </span>
+                <span className="bmm-detail-unit">{bodyPartUnit}</span>
+              </div>
+              {bodyPartDelta != null && bodyPartDelta !== 0 && (
+                <div className={`bmm-detail-change ${bodyPartDelta > 0 ? 'up' : 'down'}`}>
+                  {bodyPartDelta > 0 ? '+' : ''}{fmtNum(bodyPartDelta)} {bodyPartUnit} {t('since previous')}
+                </div>
+              )}
+              <div className="small muted" style={{ marginTop: 4 }}>
+                {t('Last measured {0}', fmtDate(bodyPartLatest.entry.d, true))}
+              </div>
+              
+              {bodyPartPoints.length > 1 && (
+                <div className="bmm-detail-chart">
+                  <LineChart points={bodyPartPoints} h={100} unit={bodyPartUnit} color="var(--teal)" />
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="muted small">{t('No measurements yet. Tap Log to add your first.')}</div>
+          )}
+          
+          <div className="bmm-detail-actions">
+            <Button size="sm" icon="plus" onClick={() => measurementLogSheet()}>{t('Log new')}</Button>
+            {bodyPartLatest && (
+              <Button size="sm" variant="ghost" icon="pencil" onClick={() => measurementLogSheet(bodyPartLatest.entry.d)}>
+                {t('Edit last')}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
 
     <div className="card">
