@@ -32,6 +32,7 @@ import { sameMuscleFirst, swapMuscleOf } from './lib/similar-exercises.js'
 import { exerciseMuscleSnapshot, loadOfWorkouts, MUSCLES, MUSCLE_NAME, muscleWeightsOf, normalizeMuscleGroups, hasExplicitMuscleMetadata, inMuscleOrder } from './lib/muscles.js'
 import { parseImport, mergeImport } from './lib/import-csv.js'
 import { importHevyData, HevyApiError, HEVY_DEV_SETTINGS, mergeHevyRoutines } from './lib/import-hevy.js'
+import { parseHevyRoutineHtml, mergeHevyHtmlRoutines } from './lib/import-hevy-html.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan, planPrintHTML } from './lib/plan-share.js'
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP, formulaOf, FORMULA_NAMES } from './lib/onerm.js'
 import { exerciseHistory } from './lib/exercise-history.js'
@@ -529,19 +530,23 @@ function hevyProgressLabel(p) {
 
 function HevyImportSheet({ close }) {
   const st = useStore(s => s.S)
+  const [mode, setMode] = useState('api') // 'api' | 'html'
   const [apiKey, setApiKey] = useState('')
+  const [htmlText, setHtmlText] = useState('')
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState(null)
-  const [payload, setPayload] = useState(null) // { workouts, routines, bodyweight }
+  const [payload, setPayload] = useState(null) // { workouts, routines, bodyweight } for API, { routines } for HTML
   const [wantWorkouts, setWantWorkouts] = useState(true)
   const [wantRoutines, setWantRoutines] = useState(true)
   const [wantBody, setWantBody] = useState(true)
   const keyRef = useRef(null)
+  const htmlRef = useRef(null)
 
   // Drop the key from memory when the sheet goes away (unmount or successful import).
-  useEffect(() => () => { setApiKey('') }, [])
+  useEffect(() => () => { setApiKey(''); setHtmlText('') }, [])
 
   const wipeKey = () => { setApiKey(''); if (keyRef.current) keyRef.current.value = '' }
+  const wipeHtml = () => { setHtmlText(''); if (htmlRef.current) htmlRef.current.value = '' }
 
   const fetchAccount = async () => {
     const key = apiKey.trim()
@@ -560,7 +565,7 @@ function HevyImportSheet({ close }) {
       setWantWorkouts(!!data.workouts.workouts.length)
       setWantRoutines(!!data.routines.routines.length)
       setWantBody(!!data.bodyweight.bodyweight.length)
-      setPayload(data)
+      setPayload({ ...data, source: 'api' })
     } catch (e) {
       if (e instanceof HevyApiError && e.message === 'auth') toast(t('That Hevy API key was refused'))
       else if (e instanceof HevyApiError && e.message === 'rate-limit') toast(t('Hevy is rate-limiting requests. Wait a minute and try again'))
@@ -572,25 +577,61 @@ function HevyImportSheet({ close }) {
     }
   }
 
+  const parseHtml = () => {
+    const html = htmlText.trim()
+    if (!html) { toast(t('Paste the Hevy routine page HTML first')); return }
+    setBusy(true)
+    try {
+      const parsed = parseHevyRoutineHtml(html)
+      if (parsed.error) {
+        if (parsed.error === 'empty') toast(t('Paste the Hevy routine page HTML first'))
+        else if (parsed.error === 'not-hevy') toast(t('This doesn\'t look like a Hevy routine page'))
+        else if (parsed.error === 'no-exercises') toast(t('No exercises found in the HTML. Make sure you copied the full page source.'))
+        else toast(parsed.message || t('Could not parse that HTML'))
+        return
+      }
+      if (!parsed.routines.length) {
+        toast(t('No routines found in the HTML'))
+        return
+      }
+      wipeHtml()
+      setWantRoutines(true)
+      setPayload({ routines: parsed, source: 'html' })
+    } catch (e) {
+      toast(t('Could not parse that HTML'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const doImport = () => {
     if (!payload) return
     const parts = []
     let addedW = 0, addedR = 0, addedB = 0
     update(s => {
-      if (wantWorkouts && payload.workouts.workouts.length) {
-        const res = mergeImport(s, payload.workouts)
-        addedW = res.added
-        parts.push(tn('{0} workout imported', '{0} workouts imported', res.added))
-      }
-      if (wantRoutines && payload.routines.routines.length) {
-        const res = mergeHevyRoutines(s, payload.routines)
-        addedR = res.added
-        parts.push(tn('{0} routine imported', '{0} routines imported', res.added))
-      }
-      if (wantBody && payload.bodyweight.bodyweight.length) {
-        const res = mergeImport(s, payload.bodyweight)
-        addedB = res.added
-        parts.push(tn('{0} weigh-in imported', '{0} weigh-ins imported', res.added))
+      if (payload.source === 'api') {
+        if (wantWorkouts && payload.workouts.workouts.length) {
+          const res = mergeImport(s, payload.workouts)
+          addedW = res.added
+          parts.push(tn('{0} workout imported', '{0} workouts imported', res.added))
+        }
+        if (wantRoutines && payload.routines.routines.length) {
+          const res = mergeHevyRoutines(s, payload.routines)
+          addedR = res.added
+          parts.push(tn('{0} routine imported', '{0} routines imported', res.added))
+        }
+        if (wantBody && payload.bodyweight.bodyweight.length) {
+          const res = mergeImport(s, payload.bodyweight)
+          addedB = res.added
+          parts.push(tn('{0} weigh-in imported', '{0} weigh-ins imported', res.added))
+        }
+      } else {
+        // HTML import - routines only
+        if (wantRoutines && payload.routines.routines.length) {
+          const res = mergeHevyHtmlRoutines(s, payload.routines)
+          addedR = res.added
+          parts.push(tn('{0} routine imported', '{0} routines imported', res.added))
+        }
       }
     })
     close()
@@ -601,33 +642,124 @@ function HevyImportSheet({ close }) {
   if (!payload) {
     return <>
       <h3>{t('Import from Hevy')}</h3>
-      <div className="muted small" style={{ marginBottom: 14, lineHeight: 1.5 }}>
-        {t('Pull your history with a Hevy Pro API key. The key is only used for this import and is not saved.')}
-      </div>
-      <label className="small dim" style={{ display: 'block', marginBottom: 6 }}>{t('Hevy API key')}</label>
-      <TextField
-        ref={keyRef}
-        type="password"
-        autoComplete="off"
-        spellCheck={false}
-        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-        value={apiKey}
-        disabled={busy}
-        onChange={e => setApiKey(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && !busy) fetchAccount() }}
+      <Segmented
+        style={{ marginBottom: 16 }}
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: 'api', label: t('API Key') },
+          { value: 'html', label: t('Paste Routine') },
+        ]}
       />
-      <div className="small" style={{ margin: '10px 0 16px', lineHeight: 1.45 }}>
-        <a href={HEVY_DEV_SETTINGS} target="_blank" rel="noopener noreferrer">{t('Get your API key')}</a>
-        <span className="dim"> · {t('Hevy → Settings → Developer')}</span>
-      </div>
-      {busy && <div className="small dim" style={{ marginBottom: 12 }}>{hevyProgressLabel(progress)}</div>}
-      <Button variant="primary" onClick={fetchAccount} disabled={busy || !apiKey.trim()}>
-        {busy ? t('Fetching from Hevy…') : t('Fetch from Hevy')}
-      </Button>
+
+      {mode === 'api' && <>
+        <div className="muted small" style={{ marginBottom: 14, lineHeight: 1.5 }}>
+          {t('Pull your full history with a Hevy API key. The key is only used for this import and is not saved.')}
+        </div>
+        <label className="small dim" style={{ display: 'block', marginBottom: 6 }}>{t('Hevy API key')}</label>
+        <TextField
+          ref={keyRef}
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+          value={apiKey}
+          disabled={busy}
+          onChange={e => setApiKey(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !busy) fetchAccount() }}
+        />
+        <div className="small" style={{ margin: '10px 0 16px', lineHeight: 1.45 }}>
+          <a href={HEVY_DEV_SETTINGS} target="_blank" rel="noopener noreferrer">{t('Get your API key')}</a>
+          <span className="dim"> · {t('Hevy → Settings → Developer')}</span>
+        </div>
+        {busy && <div className="small dim" style={{ marginBottom: 12 }}>{hevyProgressLabel(progress)}</div>}
+        <Button variant="primary" onClick={fetchAccount} disabled={busy || !apiKey.trim()}>
+          {busy ? t('Fetching from Hevy…') : t('Fetch from Hevy')}
+        </Button>
+      </>}
+
+      {mode === 'html' && <>
+        <div className="muted small" style={{ marginBottom: 14, lineHeight: 1.5 }}>
+          {t('Paste the HTML from a shared Hevy routine page to import it. Share a routine in Hevy, open the link, then copy the page source.')}
+        </div>
+        <label className="small dim" style={{ display: 'block', marginBottom: 6 }}>{t('Page HTML')}</label>
+        <textarea
+          ref={htmlRef}
+          style={{
+            width: '100%',
+            minHeight: 120,
+            padding: '10px 12px',
+            border: '1px solid var(--sep)',
+            borderRadius: 8,
+            background: 'var(--bg-2)',
+            color: 'var(--label)',
+            fontSize: 13,
+            fontFamily: 'monospace',
+            resize: 'vertical',
+          }}
+          placeholder="<!DOCTYPE html>..."
+          value={htmlText}
+          disabled={busy}
+          onChange={e => setHtmlText(e.target.value)}
+        />
+        <div className="small dim" style={{ margin: '10px 0 16px', lineHeight: 1.45 }}>
+          {t('Right-click the page → View Page Source, then copy all.')}
+        </div>
+        <Button variant="primary" onClick={parseHtml} disabled={busy || !htmlText.trim()}>
+          {busy ? t('Parsing…') : t('Parse Routine')}
+        </Button>
+      </>}
+
       <div style={{ height: 8 }} />
       <Button variant="ghost" className="dim" onClick={close} disabled={busy}>{t('Cancel')}</Button>
     </>
   }
+
+  // Results view - HTML import (routines only)
+  if (payload.source === 'html') {
+    const r = payload.routines
+    const freshR = r.routines.length
+    const canImport = wantRoutines && freshR > 0
+    const unmatched = r.unmatchedNames || []
+
+    return <>
+      <h3>{t('Import from Hevy')}</h3>
+      <div className="muted small" style={{ marginBottom: 12 }}>
+        {r.routines[0]?.name || t('Routine')}
+      </div>
+
+      <div className="tiles" style={{ textAlign: 'start' }}>
+        <div className="tile"><div className="l">{t('Routines')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{r.routines.length}</div></div>
+        <div className="tile"><div className="l">{t('Exercises')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{r.exerciseCount}</div></div>
+        <div className="tile"><div className="l">{t('Exercises matched')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{r.matched}</div></div>
+        <div className="tile"><div className="l">{t('Added as your own')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{r.created}</div></div>
+      </div>
+
+      {r.routines.length > 0 && <div className="row between" style={{ padding: '10px 2px', borderTop: '1px solid var(--sep)', borderBottom: '1px solid var(--sep)', gap: 12, marginBottom: 8 }}>
+        <div>
+          <div className="tt" style={{ fontSize: 15 }}>{t('Import routines')}</div>
+          <div className="small dim">{t('{0} routines · {1} exercises, added as new plans', freshR, r.exerciseCount)}</div>
+        </div>
+        <Switch checked={wantRoutines} onChange={setWantRoutines} />
+      </div>}
+
+      {unmatched.length > 0 && <>
+        <h4 className="sec">{t('Not in the library, so they\'re added as your own exercises')}</h4>
+        <div className="mchips" style={{ marginBottom: 12 }}>
+          {unmatched.slice(0, 12).map(n => <span key={n} className="mchip capitalize">{n}</span>)}
+          {unmatched.length > 12 && <span className="mchip">+{unmatched.length - 12}</span>}
+        </div>
+      </>}
+
+      <Button variant="primary" onClick={doImport} disabled={!canImport}>
+        {canImport ? t('Import') : t('Nothing to import')}
+      </Button>
+      <div style={{ height: 8 }} />
+      <Button variant="ghost" className="dim" onClick={() => { setPayload(null); wipeHtml() }}>{t('Back')}</Button>
+    </>
+  }
+
+  // Results view - API import
 
   const w = payload.workouts
   const r = payload.routines
