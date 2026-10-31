@@ -171,6 +171,11 @@ export default function Plan() {
     <input ref={fileRef} type="file" accept="application/json,.json" onChange={pickFile} hidden />
     <Segmented className="plan-views" value={view} onChange={setView}
       options={[{ value: 'schedule', label: t('Schedule') }, { value: 'routines', label: t('Routines') }]} />
+    {/* Quick access to Library and Stats from Plan */}
+    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      <Button size="sm" variant="ghost" icon="search" onClick={() => nav('/library')} style={{ flex: 1 }}>{t('Library')}</Button>
+      <Button size="sm" variant="ghost" icon="chart" onClick={() => nav('/stats')} style={{ flex: 1 }}>{t('Stats')}</Button>
+    </div>
     {view === 'routines'
       ? <Routines S={S} update={update} nav={nav} />
       : <Schedule S={S} update={update} nav={nav} mode={mode} />}

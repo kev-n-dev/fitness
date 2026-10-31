@@ -30,7 +30,12 @@ export default function TabBar({ onStart }) {
   const trouble = useConnectionTrouble()
   if (!user && !isGuest) return null
   const cur = loc.pathname.split('/')[1] || 'home'
-  const on = k => cur === k || (cur === 'history' && k === 'stats') || (cur === 'settings' && k === 'home') || (cur === 'muscles' && k === 'library') || (cur === 'structural-balance' && k === 'stats')
+  
+  // Tab active states
+  const onHome = cur === 'home' || cur === 'settings' || cur === 'checkin' || cur === 'nutrition' || cur === 'measurements' || cur === 'progress-photos'
+  const onPlan = cur === 'plan' || cur === 'library' || cur === 'muscles'
+  const onCompete = cur === 'ranks' || cur === 'leaderboard' || cur === 'challenges' || cur === 'structural-balance'
+  const onSocial = cur === 'social' || cur === 'profile'
 
   const running = !!S.active && cur !== 'workout' && !S.active.editingWorkoutId && !S.active.backfill && S.active.start > 0
   const startWorkout = () => {
@@ -42,18 +47,10 @@ export default function TabBar({ onStart }) {
     nav('/workout')
   }
 
-  // extend active-check for new routes
-  const onEx = k => on(k)
-    || (cur === 'ranks' && k === 'ranks')
-    || (cur === 'leaderboard' && k === 'ranks')
-    || (cur === 'challenges' && k === 'ranks')
-
-  const onSocial = cur === 'social' || cur === 'profile'
-
   return (
     <nav id="tabbar">
-      <Tab active={on('home')} icon="house" label={t('Home')} dot={trouble} onClick={() => nav('/home')} />
-      <Tab active={on('plan')} icon="clipboard" label={t('Plan')} onClick={() => nav('/plan')} />
+      <Tab active={onHome} icon="house" label={t('Home')} dot={trouble} onClick={() => nav('/home')} />
+      <Tab active={onPlan} icon="clipboard" label={t('Plan')} onClick={() => nav('/plan')} />
       {/* Centre start / resume button */}
       <button className={'start' + (S.active ? ' rec' : '') + (S.active && cur === 'workout' ? ' on' : '')} onClick={startWorkout}
         aria-label={running ? t('Resume') : undefined}>
@@ -61,8 +58,8 @@ export default function TabBar({ onStart }) {
         {running ? <span className="tab-time"><Elapsed start={S.active.start} /></span>
           : <span>{S.active ? (cur === 'workout' ? t('Workout') : S.active.editingWorkoutId ? t('Edit workout') : t('Resume')) : t('Start')}</span>}
       </button>
-      <Tab active={on('stats')} icon="chart" label={t('Stats')} onClick={() => nav('/stats')} />
-      <Tab active={on('library')} icon="search" label={t('Library')} onClick={() => nav('/library')} />
+      <Tab active={onCompete} icon="trophy" label={t('Compete')} onClick={() => nav('/ranks')} />
+      <Tab active={onSocial} icon="chat" label={t('Social')} onClick={() => nav('/social')} />
     </nav>
   )
 }
