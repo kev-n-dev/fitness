@@ -13,8 +13,8 @@ html_handling = "auto-trailing-slash"
 
 [vars]
 LOG_LEVEL = "debug"
-RP_ID = "fitness-app-dvv.pages.dev"
-ORIGIN = "https://fitness-app-dvv.pages.dev"
+RP_ID = "fitness.kc-labs.workers.dev"
+ORIGIN = "https://fitness.kc-labs.workers.dev"
 RP_NAME = "openGym"
 SESSION_DAYS = "90"
 INVITE_ONLY = "false"
