@@ -9,6 +9,7 @@ import {
   updateFriendRequest, getExistingFriendRequest,
   createFriendInviteCode, getFriendInviteCode, useFriendInviteCode,
   searchUsersByName,
+  createNotification, isNotificationTypeEnabled,
 } from '../db/queries.js';
 
 const log = createLogger('friends');
@@ -127,6 +128,19 @@ app.post('/api/friends/request', async (c) => {
   await createFriendRequest(c.env.DB, request);
   log.info(c.env, 'friend request sent', { from: session.user.id, to: toUserId });
 
+  // Create notification for the recipient
+  const enabled = await isNotificationTypeEnabled(c.env.DB, toUserId, 'friend_request');
+  if (enabled) {
+    await createNotification(c.env.DB, {
+      user_id: toUserId,
+      type: 'friend_request',
+      title: 'Friend Request',
+      body: `${session.user.name} sent you a friend request`,
+      data: JSON.stringify({ requestId: request.id, fromUserId: session.user.id, fromUserName: session.user.name }),
+      created: now,
+    });
+  }
+
   return c.json({ 
     id: request.id,
     to: { id: targetUser.id, name: targetUser.name },
@@ -164,6 +178,19 @@ app.post('/api/friends/request/:id/accept', async (c) => {
   await createFriendship(c.env.DB, session.user.id, request.from_user_id, now);
 
   log.info(c.env, 'friend request accepted', { userId: session.user.id, from: request.from_user_id });
+
+  // Notify the requester that their request was accepted
+  const enabled = await isNotificationTypeEnabled(c.env.DB, request.from_user_id, 'friend_accepted');
+  if (enabled) {
+    await createNotification(c.env.DB, {
+      user_id: request.from_user_id,
+      type: 'friend_accepted',
+      title: 'Friend Request Accepted',
+      body: `${session.user.name} accepted your friend request`,
+      data: JSON.stringify({ userId: session.user.id, userName: session.user.name }),
+      created: now,
+    });
+  }
 
   return c.json({ ok: true });
 });

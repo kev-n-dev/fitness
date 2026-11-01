@@ -572,3 +572,98 @@ export async function getUserChallengeProgress(db, challengeId, userId) {
     'SELECT * FROM challenge_progress WHERE challenge_id = ? AND user_id = ?'
   ).bind(challengeId, userId).first();
 }
+
+// ── notifications ─────────────────────────────────────────────────────────────
+
+export async function createNotification(db, row) {
+  return db.prepare(
+    `INSERT INTO notifications (user_id, type, title, body, data, read, created)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    row.user_id,
+    row.type,
+    row.title,
+    row.body ?? null,
+    row.data ?? null,
+    row.read ?? 0,
+    row.created
+  ).run();
+}
+
+export async function getNotificationsByUser(db, userId, { limit = 50, before = null } = {}) {
+  const query = before
+    ? `SELECT * FROM notifications WHERE user_id = ? AND id < ? ORDER BY created DESC LIMIT ?`
+    : `SELECT * FROM notifications WHERE user_id = ? ORDER BY created DESC LIMIT ?`;
+
+  const { results } = before
+    ? await db.prepare(query).bind(userId, before, limit).all()
+    : await db.prepare(query).bind(userId, limit).all();
+  return results;
+}
+
+export async function getUnreadCount(db, userId) {
+  const row = await db.prepare(
+    'SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0'
+  ).bind(userId).first();
+  return row ? row.n : 0;
+}
+
+export async function markNotificationRead(db, id, userId) {
+  return db.prepare(
+    'UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?'
+  ).bind(id, userId).run();
+}
+
+export async function markAllNotificationsRead(db, userId) {
+  return db.prepare(
+    'UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0'
+  ).bind(userId).run();
+}
+
+export async function getNotificationPreferences(db, userId) {
+  return db.prepare(
+    'SELECT * FROM notification_preferences WHERE user_id = ?'
+  ).bind(userId).first();
+}
+
+export async function updateNotificationPreferences(db, userId, prefs) {
+  const now = new Date().toISOString();
+  return db.prepare(
+    `INSERT INTO notification_preferences (user_id, friend_requests, challenge_updates, friend_activity, created, updated)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       friend_requests = excluded.friend_requests,
+       challenge_updates = excluded.challenge_updates,
+       friend_activity = excluded.friend_activity,
+       updated = excluded.updated`
+  ).bind(
+    userId,
+    prefs.friend_requests ?? 1,
+    prefs.challenge_updates ?? 1,
+    prefs.friend_activity ?? 1,
+    now,
+    now
+  ).run();
+}
+
+// Check if user has a specific notification type enabled
+export async function isNotificationTypeEnabled(db, userId, type) {
+  const prefs = await getNotificationPreferences(db, userId);
+  if (!prefs) return true; // Default to enabled if no preferences set
+
+  switch (type) {
+    case 'friend_request':
+    case 'friend_accepted':
+      return prefs.friend_requests === 1;
+    case 'challenge_received':
+    case 'challenge_accepted':
+    case 'challenge_declined':
+    case 'challenge_won':
+    case 'challenge_lost':
+      return prefs.challenge_updates === 1;
+    case 'friend_workout':
+      return prefs.friend_activity === 1;
+    default:
+      return true;
+  }
+}

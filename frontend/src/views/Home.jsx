@@ -17,6 +17,7 @@ import { glyphOf } from '../lib/glyphs.js'
 import { dayNoteOf } from '../lib/day-notes.js'
 import { getCachedVitals, healthReadStatus, enableHealthRead } from '../lib/health-read.js'
 import { MOBILE } from '../lib/mobile.js'
+import NotificationBell from '../components/NotificationBell.jsx'
 
 // Default daily water goal in ml — matches Nutrition.jsx DEFAULT_GOALS.water
 const DEFAULT_WATER_GOAL = 2500
@@ -291,7 +292,10 @@ export default function Home() {
   return <div className="narrow">
     <div className="hdr">
       <div><h1>{user ? t('Hi {0}', user.name) : 'openGym'}</h1><div className="sub">{today.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}</div></div>
-      <button className="iconbtn" onClick={() => nav('/settings')} aria-label={trouble ? t('Settings') + ', ' + t('Connection problem') : t('Settings')}><Icon name="gear" />{trouble && <span className="tab-dot" aria-hidden="true" />}</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <NotificationBell />
+        <button className="iconbtn" onClick={() => nav('/settings')} aria-label={trouble ? t('Settings') + ', ' + t('Connection problem') : t('Settings')}><Icon name="gear" />{trouble && <span className="tab-dot" aria-hidden="true" />}</button>
+      </div>
     </div>
 
     <div className="card">

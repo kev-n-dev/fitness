@@ -13,6 +13,7 @@ import {
   updateChallengeProgress,
   getActiveChallenges,
   getPendingChallenges,
+  createNotification, isNotificationTypeEnabled,
 } from '../db/queries.js';
 
 const log = createLogger('challenges');
@@ -103,6 +104,19 @@ app.post('/api/challenges', async (c) => {
     opponent: opponentId, 
     type 
   });
+
+  // Notify the opponent about the challenge
+  const enabled = await isNotificationTypeEnabled(c.env.DB, opponentId, 'challenge_received');
+  if (enabled) {
+    await createNotification(c.env.DB, {
+      user_id: opponentId,
+      type: 'challenge_received',
+      title: 'New Challenge',
+      body: `${session.user.name} challenged you!`,
+      data: JSON.stringify({ challengeId: challenge.id, creatorId: session.user.id, creatorName: session.user.name, type }),
+      created: now,
+    });
+  }
 
   return c.json({
     id: challenge.id,
@@ -284,6 +298,19 @@ app.post('/api/challenges/:id/accept', async (c) => {
 
   log.info(c.env, 'challenge accepted', { id: challengeId, userId: session.user.id });
 
+  // Notify the creator that their challenge was accepted
+  const enabled = await isNotificationTypeEnabled(c.env.DB, challenge.creator_id, 'challenge_accepted');
+  if (enabled) {
+    await createNotification(c.env.DB, {
+      user_id: challenge.creator_id,
+      type: 'challenge_accepted',
+      title: 'Challenge Accepted',
+      body: `${session.user.name} accepted your challenge!`,
+      data: JSON.stringify({ challengeId, opponentId: session.user.id, opponentName: session.user.name }),
+      created: new Date().toISOString(),
+    });
+  }
+
   return c.json({ ok: true, status: 'active' });
 });
 
@@ -311,6 +338,19 @@ app.post('/api/challenges/:id/decline', async (c) => {
   await updateChallengeStatus(c.env.DB, challengeId, 'declined');
 
   log.info(c.env, 'challenge declined', { id: challengeId, userId: session.user.id });
+
+  // Notify the creator that their challenge was declined
+  const enabled = await isNotificationTypeEnabled(c.env.DB, challenge.creator_id, 'challenge_declined');
+  if (enabled) {
+    await createNotification(c.env.DB, {
+      user_id: challenge.creator_id,
+      type: 'challenge_declined',
+      title: 'Challenge Declined',
+      body: `${session.user.name} declined your challenge`,
+      data: JSON.stringify({ challengeId, opponentId: session.user.id, opponentName: session.user.name }),
+      created: new Date().toISOString(),
+    });
+  }
 
   return c.json({ ok: true, status: 'declined' });
 });
@@ -356,6 +396,30 @@ app.get('/api/challenges/:id/progress', async (c) => {
       if (sorted.length >= 2 && sorted[0].current_value > sorted[1].current_value) {
         winner = { id: sorted[0].user_id, name: sorted[0].user_name };
         await updateChallengeStatus(c.env.DB, challengeId, 'completed', sorted[0].user_id);
+        // Notify winner and loser
+        const loserId = sorted[1].user_id;
+        const winnerEnabled = await isNotificationTypeEnabled(c.env.DB, sorted[0].user_id, 'challenge_won');
+        if (winnerEnabled) {
+          await createNotification(c.env.DB, {
+            user_id: sorted[0].user_id,
+            type: 'challenge_won',
+            title: 'Challenge Won!',
+            body: `You won the challenge against ${sorted[1].user_name}!`,
+            data: JSON.stringify({ challengeId, opponentId: loserId, opponentName: sorted[1].user_name }),
+            created: now.toISOString(),
+          });
+        }
+        const loserEnabled = await isNotificationTypeEnabled(c.env.DB, loserId, 'challenge_lost');
+        if (loserEnabled) {
+          await createNotification(c.env.DB, {
+            user_id: loserId,
+            type: 'challenge_lost',
+            title: 'Challenge Ended',
+            body: `${sorted[0].user_name} won the challenge`,
+            data: JSON.stringify({ challengeId, winnerId: sorted[0].user_id, winnerName: sorted[0].user_name }),
+            created: now.toISOString(),
+          });
+        }
       } else if (sorted.length >= 2) {
         // Tie - no winner
         await updateChallengeStatus(c.env.DB, challengeId, 'completed', null);
@@ -366,6 +430,31 @@ app.get('/api/challenges/:id/progress', async (c) => {
         if (p.current_value >= challenge.target_value) {
           winner = { id: p.user_id, name: p.user_name };
           await updateChallengeStatus(c.env.DB, challengeId, 'completed', p.user_id);
+          // Notify winner and loser
+          const loserId = p.user_id === challenge.creator_id ? challenge.opponent_id : challenge.creator_id;
+          const loser = progress.find(pr => pr.user_id === loserId);
+          const winnerEnabled = await isNotificationTypeEnabled(c.env.DB, p.user_id, 'challenge_won');
+          if (winnerEnabled) {
+            await createNotification(c.env.DB, {
+              user_id: p.user_id,
+              type: 'challenge_won',
+              title: 'Challenge Won!',
+              body: `You reached the target first!`,
+              data: JSON.stringify({ challengeId, opponentId: loserId, opponentName: loser?.user_name }),
+              created: new Date().toISOString(),
+            });
+          }
+          const loserEnabled = await isNotificationTypeEnabled(c.env.DB, loserId, 'challenge_lost');
+          if (loserEnabled) {
+            await createNotification(c.env.DB, {
+              user_id: loserId,
+              type: 'challenge_lost',
+              title: 'Challenge Ended',
+              body: `${p.user_name} reached the target first`,
+              data: JSON.stringify({ challengeId, winnerId: p.user_id, winnerName: p.user_name }),
+              created: new Date().toISOString(),
+            });
+          }
           break;
         }
       }

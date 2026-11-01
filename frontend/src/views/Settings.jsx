@@ -796,6 +796,7 @@ export default function Settings({ page = null, find = null, via = null }) {
           <Switch checked={S.connStatus !== false} onChange={v => update(s => { s.connStatus = v; if (v) s.connLocal = true })} />
         </Row>}
       </Section>
+      {user && <NotificationPreferencesSection />}
     </>,
 
     data: () => <>
@@ -1305,6 +1306,60 @@ function AccentSwatches({ S, update }) {
     </div>
     {notes.map(n => <span key={n} className="lrow-s swatch-note" style={{ flexBasis: '100%', paddingInlineStart: 41 }}>{n}</span>)}
   </>
+}
+
+// Notification preferences for friend requests, challenges, and friend activity
+function NotificationPreferencesSection() {
+  const [prefs, setPrefs] = useState({ friendRequests: true, challengeUpdates: true, friendActivity: true })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    Promise.resolve()
+      .then(() => api('/api/notifications/preferences'))
+      .then(res => {
+        if (mounted && res) {
+          setPrefs({
+            friendRequests: res.friendRequests ?? true,
+            challengeUpdates: res.challengeUpdates ?? true,
+            friendActivity: res.friendActivity ?? true,
+          })
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (mounted) setLoading(false) })
+    return () => { mounted = false }
+  }, [])
+
+  const updatePref = (key, value) => {
+    const newPrefs = { ...prefs, [key]: value }
+    setPrefs(newPrefs)
+    Promise.resolve()
+      .then(() => api('/api/notifications/preferences', {
+        method: 'PUT',
+        body: JSON.stringify(newPrefs)
+      }))
+      .catch(() => {})
+  }
+
+  if (loading) return null
+
+  return (
+    <Section title={t('Notifications')}>
+      <Row icon="person" iconTint="var(--blue)" title={t('Friend requests')}
+        subtitle={t('When someone sends or accepts your friend request')}>
+        <Switch checked={prefs.friendRequests} onChange={v => updatePref('friendRequests', v)} />
+      </Row>
+      <Row icon="trophy" iconTint="var(--orange)" title={t('Challenge updates')}
+        subtitle={t('When you receive, win, or lose a challenge')}>
+        <Switch checked={prefs.challengeUpdates} onChange={v => updatePref('challengeUpdates', v)} />
+      </Row>
+      <Row icon="dumbbell" iconTint="var(--teal)" title={t('Friend activity')}
+        subtitle={t('When a friend completes a workout')}>
+        <Switch checked={prefs.friendActivity} onChange={v => updatePref('friendActivity', v)} />
+      </Row>
+    </Section>
+  )
 }
 
 function EquipmentCard({ S, update }) {

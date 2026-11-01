@@ -10,6 +10,8 @@ import {
   getFriendActivity,
   createFriendActivity,
   activityExistsForWorkout,
+  getFriendsByUser,
+  createNotification, isNotificationTypeEnabled,
 } from '../db/queries.js';
 
 const log = createLogger('activity');
@@ -158,6 +160,22 @@ app.post('/api/activity/record', async (c) => {
     set_count: setCount || null,
     created: now,
   });
+
+  // Notify friends who have friend_activity enabled
+  const friends = await getFriendsByUser(c.env.DB, session.user.id);
+  for (const friend of friends) {
+    const enabled = await isNotificationTypeEnabled(c.env.DB, friend.id, 'friend_workout');
+    if (enabled) {
+      await createNotification(c.env.DB, {
+        user_id: friend.id,
+        type: 'friend_workout',
+        title: 'Friend Workout',
+        body: `${session.user.name} completed ${workoutName || 'a workout'}`,
+        data: JSON.stringify({ userId: session.user.id, userName: session.user.name, workoutId, workoutName }),
+        created: now,
+      });
+    }
+  }
 
   log.info(c.env, 'activity recorded', { userId: session.user.id, workoutId });
   return c.json({ ok: true });

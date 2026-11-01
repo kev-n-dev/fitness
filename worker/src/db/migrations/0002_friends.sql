@@ -95,3 +95,28 @@ CREATE TABLE IF NOT EXISTS challenge_progress (
   PRIMARY KEY (challenge_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS challenge_progress_user_id ON challenge_progress(user_id);
+
+-- ── notifications (in-app notification system) ────────────────────────────────
+CREATE TABLE IF NOT EXISTS notifications (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type         TEXT    NOT NULL,                  -- 'friend_request', 'friend_accepted', 'challenge_received', 'challenge_accepted', 'challenge_declined', 'challenge_won', 'challenge_lost', 'friend_workout'
+  title        TEXT    NOT NULL,
+  body         TEXT,
+  data         TEXT,                              -- JSON with related ids
+  read         INTEGER NOT NULL DEFAULT 0,        -- 0 = unread, 1 = read
+  created      TEXT    NOT NULL                   -- ISO-8601
+);
+CREATE INDEX IF NOT EXISTS notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS notifications_user_read ON notifications(user_id, read);
+CREATE INDEX IF NOT EXISTS notifications_created ON notifications(created DESC);
+
+-- ── notification_preferences (user settings for notification types) ───────────
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  user_id            TEXT    PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  friend_requests    INTEGER NOT NULL DEFAULT 1,  -- 1 = enabled, 0 = disabled
+  challenge_updates  INTEGER NOT NULL DEFAULT 1,
+  friend_activity    INTEGER NOT NULL DEFAULT 1,
+  created            TEXT    NOT NULL,            -- ISO-8601
+  updated            TEXT    NOT NULL             -- ISO-8601
+);

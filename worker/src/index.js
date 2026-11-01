@@ -12,6 +12,7 @@ import mediaRoutes from './routes/media.js';
 import friendsRoutes from './routes/friends.js';
 import activityRoutes from './routes/activity.js';
 import challengesRoutes from './routes/challenges.js';
+import notificationsRoutes from './routes/notifications.js';
 export { RestTimerDO } from './durable/rest-timer.js';
 
 const log = createLogger('worker');
@@ -102,6 +103,7 @@ app.route('/', mediaRoutes);
 app.route('/', friendsRoutes);
 app.route('/', activityRoutes);
 app.route('/', challengesRoutes);
+app.route('/', notificationsRoutes);
 
 // ── Default export ────────────────────────────────────────────────────────────
 export default {
