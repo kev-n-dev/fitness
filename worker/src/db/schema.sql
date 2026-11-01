@@ -18,8 +18,16 @@ CREATE TABLE IF NOT EXISTS users (
   pw_reset_exp   INTEGER,                         -- Unix ms expiry
   pw_reset_by    TEXT,                            -- admin user id that issued it
   -- optional e-mail sign-in alias
-  email          TEXT UNIQUE                      -- normalized (trimmed, lower-cased)
+  email          TEXT UNIQUE,                     -- normalized (trimmed, lower-cased)
+  -- Google OAuth fields
+  google_id            TEXT UNIQUE,               -- Google user ID
+  google_access_token  TEXT,                      -- OAuth access token
+  google_refresh_token TEXT,                      -- OAuth refresh token
+  google_token_expires INTEGER,                   -- Unix ms expiry of access token
+  google_fit_enabled   INTEGER NOT NULL DEFAULT 0,-- 1 if Google Fit connected
+  google_fit_last_sync TEXT                       -- ISO-8601 timestamp of last sync
 );
+CREATE INDEX IF NOT EXISTS users_google_id ON users(google_id);
 
 -- ── passkeys (db.creds) ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS passkeys (

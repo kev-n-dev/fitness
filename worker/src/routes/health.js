@@ -63,6 +63,7 @@ app.get('/api/config', async (c) => {
     allow_guest: ALLOW_GUEST,
     ...(PASSWORD_LOGIN ? { password_login: true } : {}),
     ...(DEFAULT_LANG ? { default_lang: DEFAULT_LANG } : {}),
+    ...(env.GOOGLE_CLIENT_ID ? { google_login: true } : {}),
   };
 
   const MEDIA_ON = /^(1|true|yes|on)$/i.test(env.MEDIA_UPLOADS || '');

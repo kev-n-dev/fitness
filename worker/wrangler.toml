@@ -35,6 +35,11 @@ MEDIA_GC_GRACE_DAYS = "14"
 ADMIN_UIDS = ""
 VAPID_SUBJECT = "mailto:admin@example.com"
 
+# Google OAuth (set via wrangler secret put)
+# GOOGLE_CLIENT_ID - OAuth 2.0 Client ID from Google Cloud Console
+# GOOGLE_CLIENT_SECRET - OAuth 2.0 Client Secret from Google Cloud Console
+# GOOGLE_REDIRECT_URI - Optional: override the callback URL (defaults to ORIGIN/api/auth/google/callback)
+
 [[d1_databases]]
 binding = "DB"
 database_name = "fitness"

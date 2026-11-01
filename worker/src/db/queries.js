@@ -228,3 +228,66 @@ export async function putVapidKeys(db, publicKey, privateKey) {
      ON CONFLICT(id) DO UPDATE SET public_key = excluded.public_key, private_key = excluded.private_key`
   ).bind(publicKey, privateKey).run();
 }
+
+// ── Google OAuth ──────────────────────────────────────────────────────────────
+
+export async function getUserByGoogleId(db, googleId) {
+  return db.prepare('SELECT * FROM users WHERE google_id = ?').bind(googleId).first();
+}
+
+export async function updateGoogleTokens(db, userId, tokens) {
+  return db.prepare(
+    `UPDATE users SET
+       google_access_token = ?,
+       google_refresh_token = COALESCE(?, google_refresh_token),
+       google_token_expires = ?
+     WHERE id = ?`
+  ).bind(
+    tokens.access_token,
+    tokens.refresh_token ?? null,
+    tokens.expires_at,
+    userId
+  ).run();
+}
+
+export async function linkGoogleAccount(db, userId, googleData) {
+  return db.prepare(
+    `UPDATE users SET
+       google_id = ?,
+       google_access_token = ?,
+       google_refresh_token = ?,
+       google_token_expires = ?,
+       google_fit_enabled = ?
+     WHERE id = ?`
+  ).bind(
+    googleData.google_id,
+    googleData.access_token,
+    googleData.refresh_token ?? null,
+    googleData.expires_at,
+    googleData.fit_enabled ? 1 : 0,
+    userId
+  ).run();
+}
+
+export async function setGoogleFitEnabled(db, userId, enabled) {
+  return db.prepare('UPDATE users SET google_fit_enabled = ? WHERE id = ?')
+    .bind(enabled ? 1 : 0, userId).run();
+}
+
+export async function updateGoogleFitLastSync(db, userId, timestamp) {
+  return db.prepare('UPDATE users SET google_fit_last_sync = ? WHERE id = ?')
+    .bind(timestamp, userId).run();
+}
+
+export async function unlinkGoogleAccount(db, userId) {
+  return db.prepare(
+    `UPDATE users SET
+       google_id = NULL,
+       google_access_token = NULL,
+       google_refresh_token = NULL,
+       google_token_expires = NULL,
+       google_fit_enabled = 0,
+       google_fit_last_sync = NULL
+     WHERE id = ?`
+  ).bind(userId).run();
+}

@@ -3,6 +3,8 @@ import { cors } from 'hono/cors';
 import { logMiddleware, createLogger } from './lib/logger.js';
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
+import googleAuthRoutes from './routes/google-auth.js';
+import googleFitRoutes from './routes/google-fit.js';
 import pairRoutes from './routes/pair.js';
 import accountRoutes from './routes/account.js';
 import syncRoutes from './routes/sync.js';
@@ -31,6 +33,7 @@ const CSRF_EXEMPT = new Set([
   '/api/pair/redeem',
   '/api/device-link/verify',
   '/api/login/password-reset',
+  '/api/auth/google/callback',
 ]);
 
 const app = new Hono();
@@ -90,6 +93,8 @@ app.use('*', async (c, next) => {
 // ── Route modules ─────────────────────────────────────────────────────────────
 app.route('/', healthRoutes);
 app.route('/', authRoutes);
+app.route('/', googleAuthRoutes);
+app.route('/', googleFitRoutes);
 app.route('/', pairRoutes);
 app.route('/', accountRoutes);
 app.route('/', syncRoutes);

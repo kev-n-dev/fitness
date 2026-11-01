@@ -423,3 +423,40 @@ export async function passwordRegister(name, password, code, email) {
 export async function passwordResetRedeem(name, code, next) {
   return (await post('/api/login/password-reset', { name, code, next })).user
 }
+
+// ── Google Fit API helpers ────────────────────────────────────────────────────
+
+export async function googleFitStatus() {
+  return api('/api/fitness/google/status')
+}
+
+export async function googleFitSync(options = {}) {
+  const body = {}
+  if (options.startMs) body.start_ms = options.startMs
+  if (options.endMs) body.end_ms = options.endMs
+  return api('/api/fitness/google/sync', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function googleFitSteps(startMs, endMs) {
+  const params = new URLSearchParams()
+  if (startMs) params.set('start', String(startMs))
+  if (endMs) params.set('end', String(endMs))
+  const query = params.toString()
+  return api('/api/fitness/google/steps' + (query ? '?' + query : ''))
+}
+
+export async function googleFitWorkouts(startMs, endMs) {
+  const params = new URLSearchParams()
+  if (startMs) params.set('start', String(startMs))
+  if (endMs) params.set('end', String(endMs))
+  const query = params.toString()
+  return api('/api/fitness/google/workouts' + (query ? '?' + query : ''))
+}
+
+export async function googleFitEnable() {
+  return api('/api/fitness/google/enable', { method: 'POST', body: '{}' })
+}
+
+export async function googleFitDisconnect() {
+  return api('/api/fitness/google/disconnect', { method: 'POST', body: '{}' })
+}
