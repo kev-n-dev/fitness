@@ -2239,12 +2239,13 @@ export default {
   'Your sports watch, calling you back.': 'Ваш спортивний годинник кличе вас назад.',
   'Coach wants you back on the bar.': 'Тренер чекає вас назад біля штанги.',
   'Gentle, for headphones or a quiet room.': 'Тихий, для навушників або спокійної кімнати.',
-  'Hide from Team Feed': 'Hide from Team Feed',
-  'Default workout visibility': 'Default workout visibility',
-  'Friend Activity': 'Friend Activity',
-  'What friends see when you complete a workout.': 'What friends see when you complete a workout.',
-  'Summary': 'Summary',
-  'Full': 'Full',
-  'Hidden': 'Hidden',
-  "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.": "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.",
+  // TODO: translate friend system strings (new in v1.5.0)
+  'Hide from Team Feed': 'Hide from Team Feed', // TODO: translate
+  'Default workout visibility': 'Default workout visibility', // TODO: translate
+  'Friend Activity': 'Friend Activity', // TODO: translate
+  'What friends see when you complete a workout.': 'What friends see when you complete a workout.', // TODO: translate
+  'Summary': 'Summary', // TODO: translate
+  'Full': 'Full', // TODO: translate
+  'Hidden': 'Hidden', // TODO: translate
+  "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.": "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.", // TODO: translate
 }

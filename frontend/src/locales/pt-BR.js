@@ -1403,14 +1403,15 @@ export const PT_BR_OVERRIDES = {
   'Gentle, for headphones or a quiet room.': 'Suave, para fones de ouvido ou um lugar silencioso.',
   'Fewer than two workouts in this period. Pick a longer one.': 'Menos de dois treinos neste período. Escolha um mais longo.',
   'Releases are checked on GitHub. The download is verified against its checksum before the installer opens.': 'As versões são verificadas no GitHub. O download é conferido pela soma de verificação antes de abrir o instalador.',
-  'Hide from Team Feed': 'Hide from Team Feed',
-  'Default workout visibility': 'Default workout visibility',
-  'Friend Activity': 'Friend Activity',
-  'What friends see when you complete a workout.': 'What friends see when you complete a workout.',
-  'Summary': 'Summary',
-  'Full': 'Full',
-  'Hidden': 'Hidden',
-  "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.": "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.",
+  // TODO: translate friend system strings (new in v1.5.0)
+  'Hide from Team Feed': 'Hide from Team Feed', // TODO: translate
+  'Default workout visibility': 'Default workout visibility', // TODO: translate
+  'Friend Activity': 'Friend Activity', // TODO: translate
+  'What friends see when you complete a workout.': 'What friends see when you complete a workout.', // TODO: translate
+  'Summary': 'Summary', // TODO: translate
+  'Full': 'Full', // TODO: translate
+  'Hidden': 'Hidden', // TODO: translate
+  "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.": "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.", // TODO: translate
 }
 
 export default { ...pt, ...PT_BR_OVERRIDES }

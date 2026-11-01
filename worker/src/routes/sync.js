@@ -6,8 +6,10 @@
 // referencedHashes() copied from api/media.js.
 import { Hono } from 'hono';
 import { getSession } from './auth.js';
-import { getUserState, updateUser } from '../db/queries.js';
+import { getUserState, updateUser, getUserById } from '../db/queries.js';
 import { getActiveChallenges, updateChallengeProgress, updateChallengeStatus, getChallengeProgress } from '../db/queries.js';
+import { createFriendActivity, activityExistsForWorkout, getActivityFeedSettings, getWorkoutVisibility } from '../db/queries.js';
+import { getFriendsByUser, createNotification, isNotificationTypeEnabled } from '../db/queries.js';
 import { stampPut } from '../lib/sync-stamps.js';
 import { createLogger } from '../lib/logger.js';
 
@@ -181,10 +183,104 @@ async function updateChallengesAfterSync(env, userId, curState, newState) {
         log.debug(env, 'challenge progress updated (timed)', { 
           challengeId: challenge.id, userId, oldVal: currentVal, newVal 
         });
+
+        // Check if end date has passed — determine winner by highest progress
+        if (challenge.end_date) {
+          const endDate = new Date(challenge.end_date);
+          if (new Date() > endDate) {
+            const allProgress = await getChallengeProgress(env.DB, challenge.id);
+            const sorted = [...allProgress].sort((a, b) => b.current_value - a.current_value);
+            if (sorted.length >= 2 && sorted[0].current_value > sorted[1].current_value) {
+              await updateChallengeStatus(env.DB, challenge.id, 'completed', sorted[0].user_id);
+              log.info(env, 'timed challenge completed', { challengeId: challenge.id, winnerId: sorted[0].user_id });
+            } else if (sorted.length >= 2) {
+              // Tie — no winner
+              await updateChallengeStatus(env.DB, challenge.id, 'completed', null);
+              log.info(env, 'timed challenge completed (tie)', { challengeId: challenge.id });
+            }
+          }
+        }
       }
     }
   } catch (e) {
     log.warn(env, 'updateChallengesAfterSync failed', { userId, error: e?.message });
+  }
+}
+
+// Record friend activity and notify friends when workouts are synced.
+async function recordFriendActivityAfterSync(env, userId, curState, newState) {
+  try {
+    const curWorkouts = curState?.workouts || [];
+    const newWorkouts = newState?.workouts || [];
+    
+    // Find new workouts (ids not in old state)
+    const curIds = new Set(curWorkouts.map(w => w.id));
+    const addedWorkouts = newWorkouts.filter(w => w.id && !curIds.has(w.id));
+    
+    if (addedWorkouts.length === 0) return;
+
+    // Get user info for notifications
+    const user = await getUserById(env.DB, userId);
+    if (!user) return;
+
+    // Check user's visibility settings
+    const settings = await getActivityFeedSettings(env.DB, userId);
+    const defaultVisibility = settings?.default_visibility || 'summary';
+
+    const now = new Date().toISOString();
+
+    for (const workout of addedWorkouts) {
+      // Check per-workout visibility override
+      const vis = await getWorkoutVisibility(env.DB, userId, workout.id);
+      const effectiveVisibility = vis?.visibility || defaultVisibility;
+
+      // Skip if user has hidden this workout
+      if (effectiveVisibility === 'hidden') continue;
+
+      // Check if already recorded
+      const exists = await activityExistsForWorkout(env.DB, userId, workout.id);
+      if (exists) continue;
+
+      // Calculate workout stats
+      const exercises = workout.ex || [];
+      const exerciseCount = exercises.length;
+      const setCount = exercises.reduce((acc, ex) => acc + (ex.sets?.length || 0), 0);
+      const durationMs = workout.endedAt && workout.startedAt
+        ? new Date(workout.endedAt).getTime() - new Date(workout.startedAt).getTime()
+        : null;
+
+      // Record the activity
+      await createFriendActivity(env.DB, {
+        user_id: userId,
+        workout_id: workout.id,
+        workout_name: workout.name || null,
+        completed_at: workout.endedAt || now,
+        duration_ms: durationMs,
+        exercise_count: exerciseCount,
+        set_count: setCount,
+        created: now,
+      });
+
+      log.debug(env, 'friend activity recorded', { userId, workoutId: workout.id });
+
+      // Notify friends who have friend_activity notifications enabled
+      const friends = await getFriendsByUser(env.DB, userId);
+      for (const friend of friends) {
+        const enabled = await isNotificationTypeEnabled(env.DB, friend.id, 'friend_workout');
+        if (enabled) {
+          await createNotification(env.DB, {
+            user_id: friend.id,
+            type: 'friend_workout',
+            title: 'Friend Workout',
+            body: `${user.name} completed ${workout.name || 'a workout'}`,
+            data: JSON.stringify({ userId, userName: user.name, workoutId: workout.id, workoutName: workout.name }),
+            created: now,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    log.warn(env, 'recordFriendActivityAfterSync failed', { userId, error: e?.message });
   }
 }
 
@@ -406,6 +502,7 @@ app.put('/api/data', async (c) => {
       );
       await noteState(env, user.id, cur, body.state);
       await updateChallengesAfterSync(env, user.id, cur, body.state);
+      await recordFriendActivityAfterSync(env, user.id, cur, body.state);
     })().catch(e => log.warn(env, 'sync post-write KV failed', { userId: user.id, error: e?.message })),
   );
 

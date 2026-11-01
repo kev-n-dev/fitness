@@ -2242,12 +2242,13 @@ export default {
   'Your sports watch, calling you back.': 'आपकी स्पोर्ट्स घड़ी आपको वापस बुला रही है।',
   'Coach wants you back on the bar.': 'कोच आपको बार पर वापस चाहते हैं।',
   'Gentle, for headphones or a quiet room.': 'धीमी, हेडफ़ोन या शांत कमरे के लिए।',
-  'Hide from Team Feed': 'Hide from Team Feed',
-  'Default workout visibility': 'Default workout visibility',
-  'Friend Activity': 'Friend Activity',
-  'What friends see when you complete a workout.': 'What friends see when you complete a workout.',
-  'Summary': 'Summary',
-  'Full': 'Full',
-  'Hidden': 'Hidden',
-  "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.": "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.",
+  // TODO: translate friend system strings (new in v1.5.0)
+  'Hide from Team Feed': 'Hide from Team Feed', // TODO: translate
+  'Default workout visibility': 'Default workout visibility', // TODO: translate
+  'Friend Activity': 'Friend Activity', // TODO: translate
+  'What friends see when you complete a workout.': 'What friends see when you complete a workout.', // TODO: translate
+  'Summary': 'Summary', // TODO: translate
+  'Full': 'Full', // TODO: translate
+  'Hidden': 'Hidden', // TODO: translate
+  "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.": "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.", // TODO: translate
 }
