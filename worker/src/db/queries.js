@@ -509,9 +509,11 @@ export async function getChallengesByUser(db, userId, { status = null, limit = 5
 
 export async function updateChallengeStatus(db, id, status, winnerId = null) {
   const now = new Date().toISOString();
+  // Only update if currently 'active' to prevent race conditions where
+  // multiple concurrent syncs could declare different winners
   return db.prepare(
-    'UPDATE challenges SET status = ?, winner_id = ?, updated = ? WHERE id = ?'
-  ).bind(status, winnerId, now, id).run();
+    'UPDATE challenges SET status = ?, winner_id = ?, updated = ? WHERE id = ? AND status = ?'
+  ).bind(status, winnerId, now, id, 'active').run();
 }
 
 export async function getActiveChallenges(db, userId) {

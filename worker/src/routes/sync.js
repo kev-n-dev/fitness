@@ -208,6 +208,7 @@ async function updateChallengesAfterSync(env, userId, curState, newState) {
 }
 
 // Record friend activity and notify friends when workouts are synced.
+// Uses batched operations to avoid serial N+1 queries for users with many friends.
 async function recordFriendActivityAfterSync(env, userId, curState, newState) {
   try {
     const curWorkouts = curState?.workouts || [];
@@ -219,15 +220,25 @@ async function recordFriendActivityAfterSync(env, userId, curState, newState) {
     
     if (addedWorkouts.length === 0) return;
 
-    // Get user info for notifications
-    const user = await getUserById(env.DB, userId);
+    // Get user info and friends list once, up front
+    const [user, friends, settings] = await Promise.all([
+      getUserById(env.DB, userId),
+      getFriendsByUser(env.DB, userId),
+      getActivityFeedSettings(env.DB, userId),
+    ]);
     if (!user) return;
 
-    // Check user's visibility settings
-    const settings = await getActivityFeedSettings(env.DB, userId);
     const defaultVisibility = settings?.default_visibility || 'summary';
-
     const now = new Date().toISOString();
+
+    // Collect all notifications to create, then batch-insert them
+    const notificationsToCreate = [];
+
+    // Pre-fetch notification preferences for all friends in parallel
+    const friendPrefs = await Promise.all(
+      friends.map(f => isNotificationTypeEnabled(env.DB, f.id, 'friend_workout').then(enabled => ({ id: f.id, enabled })))
+    );
+    const enabledFriendIds = new Set(friendPrefs.filter(p => p.enabled).map(p => p.id));
 
     for (const workout of addedWorkouts) {
       // Check per-workout visibility override
@@ -263,12 +274,10 @@ async function recordFriendActivityAfterSync(env, userId, curState, newState) {
 
       log.debug(env, 'friend activity recorded', { userId, workoutId: workout.id });
 
-      // Notify friends who have friend_activity notifications enabled
-      const friends = await getFriendsByUser(env.DB, userId);
+      // Queue notifications for friends who have friend_activity enabled
       for (const friend of friends) {
-        const enabled = await isNotificationTypeEnabled(env.DB, friend.id, 'friend_workout');
-        if (enabled) {
-          await createNotification(env.DB, {
+        if (enabledFriendIds.has(friend.id)) {
+          notificationsToCreate.push({
             user_id: friend.id,
             type: 'friend_workout',
             title: 'Friend Workout',
@@ -277,6 +286,15 @@ async function recordFriendActivityAfterSync(env, userId, curState, newState) {
             created: now,
           });
         }
+      }
+    }
+
+    // Batch-create all notifications in parallel (limited concurrency)
+    if (notificationsToCreate.length > 0) {
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < notificationsToCreate.length; i += BATCH_SIZE) {
+        const batch = notificationsToCreate.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(n => createNotification(env.DB, n)));
       }
     }
   } catch (e) {

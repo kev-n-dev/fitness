@@ -11,6 +11,8 @@ import {
   createFriendActivity,
   activityExistsForWorkout,
   getFriendsByUser,
+  getFriendship,
+  getUserState,
   createNotification, isNotificationTypeEnabled,
 } from '../db/queries.js';
 
@@ -179,6 +181,76 @@ app.post('/api/activity/record', async (c) => {
 
   log.info(c.env, 'activity recorded', { userId: session.user.id, workoutId });
   return c.json({ ok: true });
+});
+
+// ── GET /api/activity/workout/:workoutId/details — fetch full workout details from a friend ──
+// Only available when the friend has set visibility to 'full' for this workout
+
+app.get('/api/activity/workout/:workoutId/details', async (c) => {
+  const session = await getSession(c);
+  if (!session) return c.json({ error: 'not signed in' }, 401);
+
+  const workoutId = c.req.param('workoutId');
+  const friendId = c.req.query('friendId');
+
+  if (!friendId) {
+    return c.json({ error: 'friendId required' }, 400);
+  }
+
+  // Verify friendship exists
+  const friendship = await getFriendship(c.env.DB, session.user.id, friendId);
+  if (!friendship) {
+    return c.json({ error: 'not friends with this user' }, 403);
+  }
+
+  // Check if the friend has set visibility to 'full' for this workout
+  const settings = await getActivityFeedSettings(c.env.DB, friendId);
+  const workoutVis = await getWorkoutVisibility(c.env.DB, friendId, workoutId);
+  const effectiveVisibility = workoutVis?.visibility || settings?.default_visibility || 'summary';
+
+  if (effectiveVisibility !== 'full') {
+    return c.json({ error: 'workout details not available (visibility not set to full)' }, 403);
+  }
+
+  // Fetch the friend's state to get workout details
+  const stateRow = await getUserState(c.env.DB, friendId);
+  if (!stateRow?.state) {
+    return c.json({ error: 'workout not found' }, 404);
+  }
+
+  let state;
+  try {
+    state = JSON.parse(stateRow.state);
+  } catch {
+    return c.json({ error: 'could not read workout data' }, 500);
+  }
+
+  const workouts = state.workouts || [];
+  const workout = workouts.find(w => w.id === workoutId);
+  if (!workout) {
+    return c.json({ error: 'workout not found' }, 404);
+  }
+
+  // Return the full workout breakdown (exercises, sets, reps, weight)
+  const exercises = (workout.ex || []).map(ex => ({
+    id: ex.id,
+    name: ex.name || null,
+    sets: (ex.sets || []).map(set => ({
+      reps: set.r || null,
+      weight: set.w || null,
+      rpe: set.rpe || null,
+      rir: set.rir || null,
+      type: set.type || null,
+    })),
+  }));
+
+  return c.json({
+    workoutId: workout.id,
+    name: workout.name || null,
+    startedAt: workout.startedAt || null,
+    endedAt: workout.endedAt || null,
+    exercises,
+  });
 });
 
 export default app;

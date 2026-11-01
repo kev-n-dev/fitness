@@ -155,6 +155,22 @@ export default function Settings({ page = null, find = null, via = null }) {
   // Where auto-backup writes on this Android phone, for the Auto-backup row's own subtitle.
   const [backupDir] = useBackupFolder(MOBILE && android && !!S.autoBackup)
 
+  // Fetch activity visibility from server when visiting the 'look' page — ensures a fresh device
+  // shows the server's value instead of the local default.
+  useEffect(() => {
+    if (page !== 'look' || !user) return
+    let mounted = true
+    Promise.resolve()
+      .then(() => api('/api/activity/settings'))
+      .then(res => {
+        if (mounted && res?.defaultVisibility && res.defaultVisibility !== S.activityVisibility) {
+          update(s => { s.activityVisibility = res.defaultVisibility })
+        }
+      })
+      .catch(() => {})
+    return () => { mounted = false }
+  }, [page, user])
+
   useEffect(() => {
     // The in-app updater installs an .apk, so it only applies to the native Android build.
     // On iOS and the web this check is skipped and the update row never appears. isAndroid()

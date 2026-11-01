@@ -19,11 +19,17 @@ function fmtDurationShort(ms) {
 function timeAgo(ts) {
   const d = typeof ts === 'string' ? new Date(ts).getTime() : ts
   const diff = Date.now() - d
-  if (diff < 60000)     return 'just now'
-  if (diff < 3600000)   return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000)  return `${Math.floor(diff / 3600000)}h ago`
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`
+  if (diff < 60000)     return t('just now')
+  if (diff < 3600000)   return t('{0}m ago', Math.floor(diff / 60000))
+  if (diff < 86400000)  return t('{0}h ago', Math.floor(diff / 3600000))
+  if (diff < 604800000) return t('{0}d ago', Math.floor(diff / 86400000))
   return fmtDate(new Date(d).toISOString().slice(0, 10), true)
+}
+
+// Format weight with unit
+function fmtWeight(w) {
+  if (w == null) return '–'
+  return `${w}`
 }
 
 // Avatar circle — initial letter styled with a stable colour per name
@@ -47,17 +53,30 @@ function Avatar({ name, size = 36 }) {
 
 // ── Activity Card ─────────────────────────────────────────────────────────────
 
-function ActivityCard({ item, onViewDetails }) {
+function ActivityCard({ item }) {
   const [expanded, setExpanded] = useState(false)
+  const [details, setDetails] = useState(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
   const canExpand = item.visibility === 'full'
 
-  const toggleExpand = () => {
-    if (canExpand) {
-      setExpanded(!expanded)
-      if (!expanded) {
-        onViewDetails?.(item)
+  const toggleExpand = async () => {
+    if (!canExpand) return
+    
+    if (!expanded) {
+      // Fetch details if not already loaded
+      if (!details && !loadingDetails) {
+        setLoadingDetails(true)
+        try {
+          const data = await api(`/api/activity/workout/${item.workoutId}/details?friendId=${item.friendId}`)
+          setDetails(data)
+        } catch (e) {
+          console.error('Failed to load workout details:', e)
+        } finally {
+          setLoadingDetails(false)
+        }
       }
     }
+    setExpanded(!expanded)
   }
 
   return (
@@ -73,10 +92,10 @@ function ActivityCard({ item, onViewDetails }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontWeight: 600, fontSize: 15 }}>{item.friendName}</span>
-            <span className="dim" style={{ fontSize: 13 }}>completed</span>
+            <span className="dim" style={{ fontSize: 13 }}>{t('completed')}</span>
           </div>
           <div style={{ fontWeight: 500, fontSize: 15, color: 'var(--acc)', marginTop: 2 }}>
-            {item.workoutName || 'Workout'}
+            {item.workoutName || t('Workout')}
           </div>
           <div className="row" style={{ gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
             <span className="dim small" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -92,13 +111,13 @@ function ActivityCard({ item, onViewDetails }) {
             {item.exerciseCount > 0 && (
               <span className="dim small" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <Icon name="dumbbell" style={{ fontSize: 12 }} />
-                {item.exerciseCount} exercise{item.exerciseCount !== 1 ? 's' : ''}
+                {item.exerciseCount} {item.exerciseCount !== 1 ? t('exercises') : t('exercise')}
               </span>
             )}
             {item.setCount > 0 && (
               <span className="dim small" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <Icon name="list" style={{ fontSize: 12 }} />
-                {item.setCount} set{item.setCount !== 1 ? 's' : ''}
+                {item.setCount} {item.setCount !== 1 ? t('sets') : t('set')}
               </span>
             )}
           </div>
@@ -118,29 +137,44 @@ function ActivityCard({ item, onViewDetails }) {
           paddingTop: 12, 
           borderTop: '0.5px solid var(--sep)',
         }}>
-          <div className="muted small" style={{ marginBottom: 8 }}>
-            Full workout details available when {item.friendName} shares them.
-          </div>
-          {/* In a real implementation, we would fetch and show the full workout breakdown here */}
-          <div style={{ 
-            padding: '12px', 
-            background: 'var(--surface-2)', 
-            borderRadius: 8,
-            fontSize: 13,
-          }}>
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="dim">Duration</span>
-              <span>{fmtDurationShort(item.durationMs) || '–'}</span>
+          {loadingDetails ? (
+            <div className="muted small" style={{ textAlign: 'center', padding: 12 }}>
+              <Icon name="hourglass" style={{ fontSize: 16, marginBottom: 4 }} />
+              <div>{t('Loading workout details…')}</div>
             </div>
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="dim">Exercises</span>
-              <span>{item.exerciseCount || '–'}</span>
+          ) : details ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {details.exercises.map((ex, i) => (
+                <div key={i} style={{ 
+                  padding: '10px 12px', 
+                  background: 'var(--surface-2)', 
+                  borderRadius: 8 
+                }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>
+                    {ex.name || ex.id}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {ex.sets.map((set, j) => (
+                      <div key={j} className="row" style={{ fontSize: 13 }}>
+                        <span className="dim" style={{ minWidth: 24 }}>{j + 1}.</span>
+                        <span style={{ flex: 1 }}>
+                          {set.reps != null && <span>{set.reps} {t('reps')}</span>}
+                          {set.weight != null && set.reps != null && <span> × </span>}
+                          {set.weight != null && <span>{fmtWeight(set.weight)}</span>}
+                          {set.rpe != null && <span className="dim"> RPE {set.rpe}</span>}
+                          {set.rir != null && <span className="dim"> RIR {set.rir}</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <span className="dim">Total sets</span>
-              <span>{item.setCount || '–'}</span>
+          ) : (
+            <div className="muted small" style={{ textAlign: 'center', padding: 12 }}>
+              {t('Could not load workout details')}
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -148,7 +182,7 @@ function ActivityCard({ item, onViewDetails }) {
       {!canExpand && item.visibility === 'summary' && (
         <div className="dim small" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
           <Icon name="lock" style={{ fontSize: 12 }} />
-          Summary only
+          {t('Summary only')}
         </div>
       )}
     </div>
@@ -164,12 +198,12 @@ function EmptyFeed({ hasFriends }) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
         <div style={{ fontSize: 40 }}>👥</div>
-        <div style={{ fontWeight: 600, marginTop: 12, marginBottom: 8 }}>Add friends to see their activity</div>
+        <div style={{ fontWeight: 600, marginTop: 12, marginBottom: 8 }}>{t('Add friends to see their activity')}</div>
         <div className="muted small" style={{ marginBottom: 20 }}>
-          When your friends complete workouts, they'll appear here.
+          {t('When your friends complete workouts, they\'ll appear here.')}
         </div>
         <Button onClick={() => nav('/friends')}>
-          Find Friends
+          {t('Find Friends')}
         </Button>
       </div>
     )
@@ -178,9 +212,9 @@ function EmptyFeed({ hasFriends }) {
   return (
     <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
       <div style={{ fontSize: 40 }}>🏋️</div>
-      <div style={{ fontWeight: 600, marginTop: 12, marginBottom: 8 }}>No activity yet</div>
+      <div style={{ fontWeight: 600, marginTop: 12, marginBottom: 8 }}>{t('No activity yet')}</div>
       <div className="muted small">
-        When your friends complete workouts, their activity will show up here.
+        {t('When your friends complete workouts, their activity will show up here.')}
       </div>
     </div>
   )
@@ -192,9 +226,9 @@ function GuestPrompt() {
   return (
     <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
       <div style={{ fontSize: 40 }}>👥</div>
-      <div style={{ fontWeight: 600, marginTop: 12, marginBottom: 8 }}>Friend Activity</div>
+      <div style={{ fontWeight: 600, marginTop: 12, marginBottom: 8 }}>{t('Friend Activity')}</div>
       <div className="muted small">
-        Sign in to see what your friends are up to.
+        {t('Sign in to see what your friends are up to.')}
       </div>
     </div>
   )
@@ -270,12 +304,6 @@ export default function ActivityFeed() {
     }
   }
 
-  // View details callback (could be used for analytics or prefetching)
-  const handleViewDetails = (item) => {
-    // Could fetch full workout details here if needed
-    console.log('Viewing details for:', item.workoutId)
-  }
-
   // Not signed in
   if (!user) {
     return (
@@ -285,8 +313,8 @@ export default function ActivityFeed() {
             <Icon name="chevronLeft" />
           </button>
           <div>
-            <h1>Activity</h1>
-            <div className="sub">Friend workouts</div>
+            <h1>{t('Activity')}</h1>
+            <div className="sub">{t('Friend workouts')}</div>
           </div>
           <div style={{ width: 36 }} />
         </div>
@@ -302,8 +330,8 @@ export default function ActivityFeed() {
           <Icon name="chevronLeft" />
         </button>
         <div style={{ flex: 1 }}>
-          <h1>Activity</h1>
-          <div className="sub">Friend workouts</div>
+          <h1>{t('Activity')}</h1>
+          <div className="sub">{t('Friend workouts')}</div>
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="iconbtn" onClick={() => nav('/friends')} aria-label={t('Friends')}>
@@ -323,7 +351,7 @@ export default function ActivityFeed() {
       {loading && items.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
           <Icon name="hourglass" style={{ fontSize: 32, color: 'var(--label-3)' }} />
-          <div className="muted small" style={{ marginTop: 12 }}>Loading activity…</div>
+          <div className="muted small" style={{ marginTop: 12 }}>{t('Loading activity…')}</div>
         </div>
       )}
 
@@ -337,7 +365,6 @@ export default function ActivityFeed() {
         <ActivityCard 
           key={item.id} 
           item={item} 
-          onViewDetails={handleViewDetails}
         />
       ))}
 
@@ -350,7 +377,7 @@ export default function ActivityFeed() {
             onClick={loadMore}
             disabled={loadingMore}
           >
-            {loadingMore ? 'Loading…' : 'Load more'}
+            {loadingMore ? t('Loading…') : t('Load more')}
           </Button>
         </div>
       )}
@@ -360,21 +387,7 @@ export default function ActivityFeed() {
         <div className="row" style={{ gap: 8 }}>
           <Icon name="lock" style={{ color: 'var(--label-3)', fontSize: 16, flexShrink: 0 }} />
           <div className="muted small">
-            Control what friends see about your workouts in{' '}
-            <button 
-              onClick={() => nav('/settings')}
-              style={{ 
-                color: 'var(--acc)', 
-                background: 'none', 
-                border: 'none', 
-                padding: 0,
-                font: 'inherit',
-                cursor: 'pointer',
-                textDecoration: 'underline',
-              }}
-            >
-              Settings → Social
-            </button>
+            {t('Control what friends see about your workouts in Settings.')}
           </div>
         </div>
       </div>
