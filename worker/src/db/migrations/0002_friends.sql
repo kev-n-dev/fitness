@@ -64,3 +64,34 @@ CREATE TABLE IF NOT EXISTS friend_activity (
 );
 CREATE INDEX IF NOT EXISTS friend_activity_user_id ON friend_activity(user_id);
 CREATE INDEX IF NOT EXISTS friend_activity_completed_at ON friend_activity(completed_at DESC);
+
+-- ── challenges (friend competitions) ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS challenges (
+  id           TEXT    PRIMARY KEY,               -- base64url random id
+  creator_id   TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  opponent_id  TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type         TEXT    NOT NULL,                  -- 'beat_pr', 'workout_count', 'timed'
+  exercise_id  TEXT,                              -- nullable, for beat_pr challenges
+  target_value REAL    NOT NULL,                  -- target to beat/reach
+  metric       TEXT    NOT NULL DEFAULT 'count',  -- 'weight', 'reps', 'both', 'count'
+  start_date   TEXT    NOT NULL,                  -- ISO-8601
+  end_date     TEXT,                              -- ISO-8601, nullable for open-ended
+  status       TEXT    NOT NULL DEFAULT 'pending', -- 'pending', 'active', 'completed', 'declined'
+  winner_id    TEXT    REFERENCES users(id) ON DELETE SET NULL,
+  created      TEXT    NOT NULL,                  -- ISO-8601
+  updated      TEXT    NOT NULL                   -- ISO-8601
+);
+CREATE INDEX IF NOT EXISTS challenges_creator_id ON challenges(creator_id);
+CREATE INDEX IF NOT EXISTS challenges_opponent_id ON challenges(opponent_id);
+CREATE INDEX IF NOT EXISTS challenges_status ON challenges(status);
+
+-- ── challenge_progress (tracks each participant's current progress) ───────────
+CREATE TABLE IF NOT EXISTS challenge_progress (
+  challenge_id    TEXT    NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+  user_id         TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  current_value   REAL    NOT NULL DEFAULT 0,
+  best_attempt_date TEXT,                         -- ISO-8601
+  updated         TEXT    NOT NULL,               -- ISO-8601
+  PRIMARY KEY (challenge_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS challenge_progress_user_id ON challenge_progress(user_id);

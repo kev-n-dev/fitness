@@ -59,6 +59,7 @@ import UserProfile from './views/UserProfile.jsx'
 import Social from './views/Social.jsx'
 import Friends from './views/Friends.jsx'
 import ActivityFeed from './views/ActivityFeed.jsx'
+import FriendChallenges from './views/FriendChallenges.jsx'
 
 // last known scrollY per route, so back-navigation can put the page where it was
 const scrollPositions = new Map()
@@ -253,6 +254,7 @@ function Shell() {
               <Route path="/social"   element={<Social />} />
               <Route path="/friends"  element={<Friends />} />
               <Route path="/activity" element={<ActivityFeed />} />
+              <Route path="/friend-challenges" element={<FriendChallenges />} />
               <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           )}

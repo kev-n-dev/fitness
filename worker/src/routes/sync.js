@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { getSession } from './auth.js';
 import { getUserState, updateUser } from '../db/queries.js';
+import { getActiveChallenges, updateChallengeProgress, updateChallengeStatus, getChallengeProgress } from '../db/queries.js';
 import { stampPut } from '../lib/sync-stamps.js';
 import { createLogger } from '../lib/logger.js';
 
@@ -86,6 +87,104 @@ async function noteState(env, uid, curState, newState) {
     }
   } catch (e) {
     log.warn(env, 'noteState failed', { userId: uid, error: e?.message });
+  }
+}
+
+// Check active challenges and update progress after a workout sync.
+// For beat_pr challenges: check if the user beat a PR for the exercise.
+// For workout_count challenges: increment the workout count.
+async function updateChallengesAfterSync(env, userId, curState, newState) {
+  try {
+    const curWorkouts = curState?.workouts || [];
+    const newWorkouts = newState?.workouts || [];
+    
+    // Find new workouts (ids not in old state)
+    const curIds = new Set(curWorkouts.map(w => w.id));
+    const addedWorkouts = newWorkouts.filter(w => w.id && !curIds.has(w.id));
+    
+    if (addedWorkouts.length === 0) return;
+    
+    // Get active challenges for this user
+    const challenges = await getActiveChallenges(env.DB, userId);
+    if (challenges.length === 0) return;
+    
+    for (const challenge of challenges) {
+      const now = new Date().toISOString();
+      
+      if (challenge.type === 'workout_count') {
+        // Increment workout count by the number of new workouts
+        const progress = await getChallengeProgress(env.DB, challenge.id);
+        const userProgress = progress.find(p => p.user_id === userId);
+        const currentVal = userProgress?.current_value || 0;
+        const newVal = currentVal + addedWorkouts.length;
+        
+        await updateChallengeProgress(env.DB, challenge.id, userId, newVal, now);
+        log.debug(env, 'challenge progress updated (workout_count)', { 
+          challengeId: challenge.id, userId, oldVal: currentVal, newVal 
+        });
+        
+        // Check if target reached
+        if (newVal >= challenge.target_value) {
+          await updateChallengeStatus(env.DB, challenge.id, 'completed', userId);
+          log.info(env, 'challenge completed', { challengeId: challenge.id, winnerId: userId });
+        }
+      } else if (challenge.type === 'beat_pr') {
+        // Check if any added workout contains the challenge exercise with a better PR
+        for (const workout of addedWorkouts) {
+          const exercises = workout.ex || [];
+          for (const ex of exercises) {
+            if (ex.id !== challenge.exercise_id) continue;
+            
+            // Check sets for PR
+            const sets = ex.sets || [];
+            for (const set of sets) {
+              let value = 0;
+              if (challenge.metric === 'weight') {
+                value = set.w || 0;
+              } else if (challenge.metric === 'reps') {
+                value = set.r || 0;
+              } else if (challenge.metric === 'both') {
+                // Volume = weight × reps
+                value = (set.w || 0) * (set.r || 0);
+              }
+              
+              if (value > 0) {
+                const progress = await getChallengeProgress(env.DB, challenge.id);
+                const userProgress = progress.find(p => p.user_id === userId);
+                const currentVal = userProgress?.current_value || 0;
+                
+                if (value > currentVal) {
+                  await updateChallengeProgress(env.DB, challenge.id, userId, value, now);
+                  log.debug(env, 'challenge progress updated (beat_pr)', { 
+                    challengeId: challenge.id, userId, oldVal: currentVal, newVal: value 
+                  });
+                  
+                  // Check if target reached
+                  if (value >= challenge.target_value) {
+                    await updateChallengeStatus(env.DB, challenge.id, 'completed', userId);
+                    log.info(env, 'challenge completed', { challengeId: challenge.id, winnerId: userId });
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else if (challenge.type === 'timed') {
+        // Timed challenges are just workout_count but with a strict end date
+        // Completion is checked by end date, not target
+        const progress = await getChallengeProgress(env.DB, challenge.id);
+        const userProgress = progress.find(p => p.user_id === userId);
+        const currentVal = userProgress?.current_value || 0;
+        const newVal = currentVal + addedWorkouts.length;
+        
+        await updateChallengeProgress(env.DB, challenge.id, userId, newVal, now);
+        log.debug(env, 'challenge progress updated (timed)', { 
+          challengeId: challenge.id, userId, oldVal: currentVal, newVal 
+        });
+      }
+    }
+  } catch (e) {
+    log.warn(env, 'updateChallengesAfterSync failed', { userId, error: e?.message });
   }
 }
 
@@ -296,6 +395,7 @@ app.put('/api/data', async (c) => {
   // ── post-write KV bookkeeping (non-blocking) ───────────────────────────────
   // Cache the new rev so GET /api/data/rev answers from KV for the next 5 min.
   // Update media GC marks so unreferenced blobs age out correctly.
+  // Update challenge progress when workouts are added.
   const ctx = c.executionCtx ?? { waitUntil: () => {} };
   ctx.waitUntil(
     (async () => {
@@ -305,6 +405,7 @@ app.put('/api/data', async (c) => {
         { expirationTtl: 300 },
       );
       await noteState(env, user.id, cur, body.state);
+      await updateChallengesAfterSync(env, user.id, cur, body.state);
     })().catch(e => log.warn(env, 'sync post-write KV failed', { userId: user.id, error: e?.message })),
   );
 

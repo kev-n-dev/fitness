@@ -447,3 +447,128 @@ export async function activityExistsForWorkout(db, userId, workoutId) {
   ).bind(userId, workoutId).first();
   return !!row;
 }
+
+// ── challenges ────────────────────────────────────────────────────────────────
+
+export async function createChallenge(db, row) {
+  return db.prepare(
+    `INSERT INTO challenges (id, creator_id, opponent_id, type, exercise_id, target_value, metric, start_date, end_date, status, winner_id, created, updated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    row.id,
+    row.creator_id,
+    row.opponent_id,
+    row.type,
+    row.exercise_id ?? null,
+    row.target_value,
+    row.metric ?? 'count',
+    row.start_date,
+    row.end_date ?? null,
+    row.status ?? 'pending',
+    row.winner_id ?? null,
+    row.created,
+    row.updated
+  ).run();
+}
+
+export async function getChallengeById(db, id) {
+  return db.prepare('SELECT * FROM challenges WHERE id = ?').bind(id).first();
+}
+
+export async function getChallengesByUser(db, userId, { status = null, limit = 50 } = {}) {
+  // Get challenges where user is creator or opponent
+  const query = status
+    ? `SELECT c.*, 
+              creator.name AS creator_name,
+              opponent.name AS opponent_name,
+              winner.name AS winner_name
+       FROM challenges c
+       JOIN users creator ON c.creator_id = creator.id
+       JOIN users opponent ON c.opponent_id = opponent.id
+       LEFT JOIN users winner ON c.winner_id = winner.id
+       WHERE (c.creator_id = ? OR c.opponent_id = ?) AND c.status = ?
+       ORDER BY c.created DESC
+       LIMIT ?`
+    : `SELECT c.*, 
+              creator.name AS creator_name,
+              opponent.name AS opponent_name,
+              winner.name AS winner_name
+       FROM challenges c
+       JOIN users creator ON c.creator_id = creator.id
+       JOIN users opponent ON c.opponent_id = opponent.id
+       LEFT JOIN users winner ON c.winner_id = winner.id
+       WHERE c.creator_id = ? OR c.opponent_id = ?
+       ORDER BY c.created DESC
+       LIMIT ?`;
+
+  const { results } = status
+    ? await db.prepare(query).bind(userId, userId, status, limit).all()
+    : await db.prepare(query).bind(userId, userId, limit).all();
+  return results;
+}
+
+export async function updateChallengeStatus(db, id, status, winnerId = null) {
+  const now = new Date().toISOString();
+  return db.prepare(
+    'UPDATE challenges SET status = ?, winner_id = ?, updated = ? WHERE id = ?'
+  ).bind(status, winnerId, now, id).run();
+}
+
+export async function getActiveChallenges(db, userId) {
+  const { results } = await db.prepare(
+    `SELECT c.*, 
+            creator.name AS creator_name,
+            opponent.name AS opponent_name
+     FROM challenges c
+     JOIN users creator ON c.creator_id = creator.id
+     JOIN users opponent ON c.opponent_id = opponent.id
+     WHERE (c.creator_id = ? OR c.opponent_id = ?) AND c.status = 'active'
+     ORDER BY c.end_date ASC, c.created DESC`
+  ).bind(userId, userId).all();
+  return results;
+}
+
+export async function getPendingChallenges(db, userId) {
+  // Challenges awaiting acceptance where user is the opponent
+  const { results } = await db.prepare(
+    `SELECT c.*, 
+            creator.name AS creator_name,
+            opponent.name AS opponent_name
+     FROM challenges c
+     JOIN users creator ON c.creator_id = creator.id
+     JOIN users opponent ON c.opponent_id = opponent.id
+     WHERE c.opponent_id = ? AND c.status = 'pending'
+     ORDER BY c.created DESC`
+  ).bind(userId).all();
+  return results;
+}
+
+// ── challenge_progress ────────────────────────────────────────────────────────
+
+export async function getChallengeProgress(db, challengeId) {
+  const { results } = await db.prepare(
+    `SELECT cp.*, u.name AS user_name
+     FROM challenge_progress cp
+     JOIN users u ON cp.user_id = u.id
+     WHERE cp.challenge_id = ?`
+  ).bind(challengeId).all();
+  return results;
+}
+
+export async function updateChallengeProgress(db, challengeId, userId, currentValue, bestAttemptDate = null) {
+  const now = new Date().toISOString();
+  return db.prepare(
+    `INSERT INTO challenge_progress (challenge_id, user_id, current_value, best_attempt_date, updated)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(challenge_id, user_id) DO UPDATE SET 
+       current_value = excluded.current_value, 
+       best_attempt_date = COALESCE(excluded.best_attempt_date, challenge_progress.best_attempt_date),
+       updated = excluded.updated`
+  ).bind(challengeId, userId, currentValue, bestAttemptDate, now).run();
+}
+
+export async function getUserChallengeProgress(db, challengeId, userId) {
+  return db.prepare(
+    'SELECT * FROM challenge_progress WHERE challenge_id = ? AND user_id = ?'
+  ).bind(challengeId, userId).first();
+}
