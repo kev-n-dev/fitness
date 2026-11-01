@@ -10,6 +10,7 @@ import pushRoutes from './routes/push.js';
 import adminRoutes, { reminderTick } from './routes/admin.js';
 import mediaRoutes from './routes/media.js';
 import friendsRoutes from './routes/friends.js';
+import activityRoutes from './routes/activity.js';
 export { RestTimerDO } from './durable/rest-timer.js';
 
 const log = createLogger('worker');
@@ -98,6 +99,7 @@ app.route('/', pushRoutes);
 app.route('/', adminRoutes);
 app.route('/', mediaRoutes);
 app.route('/', friendsRoutes);
+app.route('/', activityRoutes);
 
 // ── Default export ────────────────────────────────────────────────────────────
 export default {

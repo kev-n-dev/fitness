@@ -1403,6 +1403,14 @@ export const PT_BR_OVERRIDES = {
   'Gentle, for headphones or a quiet room.': 'Suave, para fones de ouvido ou um lugar silencioso.',
   'Fewer than two workouts in this period. Pick a longer one.': 'Menos de dois treinos neste período. Escolha um mais longo.',
   'Releases are checked on GitHub. The download is verified against its checksum before the installer opens.': 'As versões são verificadas no GitHub. O download é conferido pela soma de verificação antes de abrir o instalador.',
+  'Hide from Team Feed': 'Hide from Team Feed',
+  'Default workout visibility': 'Default workout visibility',
+  'Friend Activity': 'Friend Activity',
+  'What friends see when you complete a workout.': 'What friends see when you complete a workout.',
+  'Summary': 'Summary',
+  'Full': 'Full',
+  'Hidden': 'Hidden',
+  "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.": "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.",
 }
 
 export default { ...pt, ...PT_BR_OVERRIDES }

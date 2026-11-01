@@ -2242,4 +2242,12 @@ export default {
   'Your sports watch, calling you back.': 'Il tuo orologio sportivo ti richiama.',
   'Coach wants you back on the bar.': 'Il coach ti vuole di nuovo al bilanciere.',
   'Gentle, for headphones or a quiet room.': 'Delicato, per le cuffie o una stanza silenziosa.',
+  'Hide from Team Feed': 'Hide from Team Feed',
+  'Default workout visibility': 'Default workout visibility',
+  'Friend Activity': 'Friend Activity',
+  'What friends see when you complete a workout.': 'What friends see when you complete a workout.',
+  'Summary': 'Summary',
+  'Full': 'Full',
+  'Hidden': 'Hidden',
+  "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.": "Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don't appear in friend feeds.",
 }

@@ -765,6 +765,29 @@ export default function Settings({ page = null, find = null, via = null }) {
           subtitle={t('Your workouts, accolades and recipes won\'t appear in the social feed for others on this server.')}>
           <Switch checked={!!S.socialPrivate} onChange={v => update(s => { s.socialPrivate = v || undefined })} />
         </Row>
+      </Section>
+      <Section title={t('Friend Activity')}>
+        <Row icon="person" iconTint="var(--blue)" title={t('Default workout visibility')}
+          subtitle={t('What friends see when you complete a workout.')}>
+          <Segmented className="seg-inline"
+            options={[
+              { value: 'summary', label: t('Summary') },
+              { value: 'full', label: t('Full') },
+              { value: 'hidden', label: t('Hidden') },
+            ]}
+            value={S.activityVisibility || 'summary'}
+            onChange={v => {
+              update(s => { s.activityVisibility = v })
+              // Sync to server
+              api('/api/activity/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ defaultVisibility: v })
+              }).catch(() => {})
+            }} />
+        </Row>
+        <div className="sect-f" style={{ marginTop: -8 }}>
+          {t('Summary: friends see workout name and stats. Full: friends can view exercise details. Hidden: workouts don\'t appear in friend feeds.')}
+        </div>
         {/* The bar at the top that says the app is offline, kept local, or not synced (#369, #330).
             Here and not under Server & sync, which a phone kept local never shows. Switching it on
             also brings back the no-server line its × hid (#454). */}

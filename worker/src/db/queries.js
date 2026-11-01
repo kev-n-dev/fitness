@@ -354,3 +354,96 @@ export async function searchUsersByName(db, query, limit = 20) {
   ).bind('%' + query + '%', limit).all();
   return results;
 }
+
+// ── activity_feed_settings ────────────────────────────────────────────────────
+
+export async function getActivityFeedSettings(db, userId) {
+  return db.prepare('SELECT * FROM activity_feed_settings WHERE user_id = ?').bind(userId).first();
+}
+
+export async function updateActivityFeedSettings(db, userId, defaultVisibility) {
+  const now = new Date().toISOString();
+  return db.prepare(
+    `INSERT INTO activity_feed_settings (user_id, default_visibility, created, updated)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET default_visibility = excluded.default_visibility, updated = excluded.updated`
+  ).bind(userId, defaultVisibility, now, now).run();
+}
+
+// ── workout_visibility ────────────────────────────────────────────────────────
+
+export async function getWorkoutVisibility(db, userId, workoutId) {
+  return db.prepare(
+    'SELECT * FROM workout_visibility WHERE user_id = ? AND workout_id = ?'
+  ).bind(userId, workoutId).first();
+}
+
+export async function setWorkoutVisibility(db, userId, workoutId, visibility) {
+  const now = new Date().toISOString();
+  return db.prepare(
+    `INSERT INTO workout_visibility (user_id, workout_id, visibility, created)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(workout_id, user_id) DO UPDATE SET visibility = excluded.visibility`
+  ).bind(userId, workoutId, visibility, now).run();
+}
+
+// ── friend_activity ───────────────────────────────────────────────────────────
+
+export async function createFriendActivity(db, row) {
+  return db.prepare(
+    `INSERT INTO friend_activity (user_id, workout_id, workout_name, completed_at, duration_ms, exercise_count, set_count, created)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    row.user_id,
+    row.workout_id,
+    row.workout_name ?? null,
+    row.completed_at,
+    row.duration_ms ?? null,
+    row.exercise_count ?? null,
+    row.set_count ?? null,
+    row.created
+  ).run();
+}
+
+export async function getFriendActivity(db, userId, { limit = 50, before = null } = {}) {
+  // Get activity from friends only, respecting visibility settings
+  // Join with friendships, activity_feed_settings, and optionally workout_visibility
+  const query = before
+    ? `SELECT fa.*, u.name AS user_name,
+              COALESCE(wv.visibility, afs.default_visibility, 'summary') AS visibility
+       FROM friend_activity fa
+       JOIN friendships f ON fa.user_id = f.friend_id AND f.user_id = ?
+       JOIN users u ON fa.user_id = u.id
+       LEFT JOIN activity_feed_settings afs ON fa.user_id = afs.user_id
+       LEFT JOIN workout_visibility wv ON fa.workout_id = wv.workout_id AND fa.user_id = wv.user_id
+       WHERE COALESCE(wv.visibility, afs.default_visibility, 'summary') != 'hidden'
+         AND fa.id < ?
+       ORDER BY fa.completed_at DESC
+       LIMIT ?`
+    : `SELECT fa.*, u.name AS user_name,
+              COALESCE(wv.visibility, afs.default_visibility, 'summary') AS visibility
+       FROM friend_activity fa
+       JOIN friendships f ON fa.user_id = f.friend_id AND f.user_id = ?
+       JOIN users u ON fa.user_id = u.id
+       LEFT JOIN activity_feed_settings afs ON fa.user_id = afs.user_id
+       LEFT JOIN workout_visibility wv ON fa.workout_id = wv.workout_id AND fa.user_id = wv.user_id
+       WHERE COALESCE(wv.visibility, afs.default_visibility, 'summary') != 'hidden'
+       ORDER BY fa.completed_at DESC
+       LIMIT ?`;
+
+  const { results } = before
+    ? await db.prepare(query).bind(userId, before, limit).all()
+    : await db.prepare(query).bind(userId, limit).all();
+  return results;
+}
+
+export async function getFriendActivityById(db, activityId) {
+  return db.prepare('SELECT * FROM friend_activity WHERE id = ?').bind(activityId).first();
+}
+
+export async function activityExistsForWorkout(db, userId, workoutId) {
+  const row = await db.prepare(
+    'SELECT 1 FROM friend_activity WHERE user_id = ? AND workout_id = ? LIMIT 1'
+  ).bind(userId, workoutId).first();
+  return !!row;
+}

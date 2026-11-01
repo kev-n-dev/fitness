@@ -113,6 +113,8 @@ export const SEARCH = [
   { page: 'look', title: 'Gym check-in', icon: 'qr', tint: 'var(--blue)', kw: 'qr code membership card check in barcode' },
   { page: 'look', title: 'Body weight', icon: 'scale', tint: 'var(--green)', kw: 'weight card home' },
   { page: 'look', title: 'Show connection status', icon: 'cloud', tint: 'var(--blue)', kw: 'sync offline banner bar connection', when: c => !c.demo },
+  { page: 'look', title: 'Hide from Team Feed', icon: 'lock', tint: 'var(--label-3)', kw: 'social privacy team feed hide private' },
+  { page: 'look', title: 'Default workout visibility', icon: 'person', tint: 'var(--blue)', kw: 'friends activity feed visibility summary full hidden privacy social', opts: ['Summary', 'Full', 'Hidden'] },
   // Data & backup
   { page: 'data', title: 'Export backup (JSON)', icon: 'share', tint: 'var(--blue)', kw: 'export backup json download save' },
   { page: 'data', title: 'Export with photos & videos (.zip)', icon: 'share', tint: 'var(--blue)', kw: 'zip media export backup', when: c => c.hasMedia },
