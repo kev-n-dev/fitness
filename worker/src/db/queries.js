@@ -228,3 +228,72 @@ export async function putVapidKeys(db, publicKey, privateKey) {
      ON CONFLICT(id) DO UPDATE SET public_key = excluded.public_key, private_key = excluded.private_key`
   ).bind(publicKey, privateKey).run();
 }
+
+// ── auth_providers ────────────────────────────────────────────────────────────
+
+export async function getAuthProvidersByUser(db, userId) {
+  const { results } = await db.prepare(
+    'SELECT * FROM auth_providers WHERE user_id = ? ORDER BY created ASC'
+  ).bind(userId).all();
+  return results;
+}
+
+export async function getAuthProviderByProviderAndId(db, provider, providerId) {
+  return db.prepare(
+    'SELECT * FROM auth_providers WHERE provider = ? AND provider_id = ?'
+  ).bind(provider, providerId).first();
+}
+
+export async function createAuthProvider(db, row) {
+  return db.prepare(
+    `INSERT INTO auth_providers (user_id, provider, provider_id, email, created, last_used)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    row.user_id,
+    row.provider,
+    row.provider_id ?? null,
+    row.email ?? null,
+    row.created,
+    row.last_used ?? null
+  ).run();
+}
+
+export async function updateAuthProviderLastUsed(db, id, lastUsed) {
+  return db.prepare(
+    'UPDATE auth_providers SET last_used = ? WHERE id = ?'
+  ).bind(lastUsed, id).run();
+}
+
+export async function deleteAuthProvider(db, id) {
+  return db.prepare('DELETE FROM auth_providers WHERE id = ?').bind(id).run();
+}
+
+export async function countAuthProvidersByUser(db, userId) {
+  const row = await db.prepare(
+    'SELECT COUNT(*) AS n FROM auth_providers WHERE user_id = ?'
+  ).bind(userId).first();
+  return row ? row.n : 0;
+}
+
+// Transfer all data from one user to another (for account merge).
+// Transfers: passkeys, user_state, push_subscriptions, auth_providers.
+export async function transferUserData(db, fromUserId, toUserId) {
+  // Transfer passkeys
+  await db.prepare(
+    'UPDATE passkeys SET user_id = ? WHERE user_id = ?'
+  ).bind(toUserId, fromUserId).run();
+
+  // Transfer push subscriptions
+  await db.prepare(
+    'UPDATE push_subscriptions SET user_id = ? WHERE user_id = ?'
+  ).bind(toUserId, fromUserId).run();
+
+  // Transfer auth providers
+  await db.prepare(
+    'UPDATE auth_providers SET user_id = ? WHERE user_id = ?'
+  ).bind(toUserId, fromUserId).run();
+
+  // For user_state, we need to merge or choose one. Here we keep target's state
+  // and discard source's since the target is the primary account.
+  // (The source user_state will be deleted when the source user is deleted due to CASCADE)
+}

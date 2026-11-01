@@ -423,3 +423,21 @@ export async function passwordRegister(name, password, code, email) {
 export async function passwordResetRedeem(name, code, next) {
   return (await post('/api/login/password-reset', { name, code, next })).user
 }
+
+// ── Account linking & merging ─────────────────────────────────────────────────
+
+export async function getLinkedProviders() {
+  return api('/api/account/providers')
+}
+
+export async function linkPassword(email, password, proof) {
+  return post('/api/account/link/password', { email, password, ...proof })
+}
+
+export async function unlinkProvider(providerId, proof) {
+  return api('/api/account/providers/' + providerId, { method: 'DELETE', body: JSON.stringify(proof) })
+}
+
+export async function mergeAccount(sourceProof) {
+  return post('/api/account/merge', { sourceProof })
+}

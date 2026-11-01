@@ -42,6 +42,8 @@ import BackupFolderRow, { useBackupFolder, autoBackupSubtitle } from '../compone
 import { ServerSyncSection, KeptChangesRows, leaveServer, connectServer, passkeySignIn } from '../components/ServerSync.jsx'
 import { passwordOn, PasswordRow, openPasswordSignIn, openPasswordRegister } from '../components/PasswordAuth.jsx'
 import { usePasskeys, PasskeysRow, DeviceLinkRow, openDeviceLinkRedeem } from '../components/Passkeys.jsx'
+import { LinkedAccountsRow, useLinkedProviders } from '../components/LinkedAccounts.jsx'
+import { AccountMergeRow } from '../components/AccountMerge.jsx'
 import { Section, Row, SelectRow, Switch, Segmented, Button, TextField, SearchField } from '../components/ui.jsx'
 import { PAGES, ROOT_GROUPS, pageVisible, searchSettings, pageTrail } from './settings-pages.js'
 
@@ -93,8 +95,10 @@ export default function Settings({ page = null, find = null, via = null }) {
   // This profile's passkeys and the code for another device (#95). A change to them is read back
   // here and by the password row, whose "Remove" depends on there being a passkey.
   const passkeys = usePasskeys(!!user && !MOBILE && !DEMO && (page === 'account'))
+  // Linked authentication providers (passkey, password, google) for account linking/merging.
+  const linkedProviders = useLinkedProviders(!!user && !MOBILE && !DEMO && (page === 'account'))
   const [credsV, setCredsV] = useState(0)
-  const credsChanged = () => { passkeys.load(); setCredsV(v => v + 1) }
+  const credsChanged = () => { passkeys.load(); linkedProviders.load(); setCredsV(v => v + 1) }
   const { update, importConflict, importBackup, setUnit, resetEverything: resetAll, setUser, pullState, pushState, resetDemo } = useStore()
   const toast = useUI(s => s.toast)
   const fileRef = useRef(null)
@@ -870,6 +874,8 @@ export default function Settings({ page = null, find = null, via = null }) {
           {user.admin && <Row icon="crown" iconTint="var(--indigo)" title={t('Admin dashboard')} accessory="chevron" onClick={() => nav('/admin')} />}
           <PasskeysRow state={passkeys.st} changed={credsChanged} />
           <DeviceLinkRow state={passkeys.st} />
+          <LinkedAccountsRow state={linkedProviders.st} changed={credsChanged} />
+          <AccountMergeRow />
           <Row icon="qr" iconTint="var(--blue)" title={t('Pair the mobile app')} subtitle={t('Connect the openGym app on your phone to this account.')} accessory="chevron"
             onClick={() => useUI.getState().openSheet(close => <PairSheet close={close} />)} />
           {pwOn && <PasswordRow version={credsV} />}
