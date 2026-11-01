@@ -1,19 +1,21 @@
 // Account linking & merging: link multiple auth methods to one account, merge accounts.
 import { Hono } from 'hono';
+import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import {
   hashPassword, verifyPassword, passwordProblem, normalizeEmail,
   MIN_LENGTH, MAX_LENGTH,
 } from '../lib/password.js';
 import { checkBackoff, failBackoff, clearBackoff } from '../lib/rate-limit.js';
+import { verifyError } from '../lib/verify-error.js';
 import { audit } from '../lib/audit.js';
 import {
   getUserById, getUserByEmail, updateUser, deleteUser,
-  getPasskeysByUser,
+  getPasskeysByUser, getPasskeyById, updatePasskeyCounter,
   getAuthProvidersByUser, getAuthProviderByProviderAndId,
   createAuthProvider, updateAuthProviderLastUsed, deleteAuthProvider,
   countAuthProvidersByUser, transferUserData,
 } from '../db/queries.js';
-import { getSession } from './auth.js';
+import { getSession, takeChallenge, base64urlToUint8Array } from './auth.js';
 
 const text = v => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
 
@@ -45,20 +47,69 @@ async function getSessionOrFail(c) {
 }
 
 // requireProof: verifies ownership via passkey assertion or password.
-// Simplified version that only handles password proof for linking.
-// Returns [true, null] on success, [false, Response] on failure.
+// Returns ['passkey'|'password', null] on success, [null, Response] on failure.
 async function requireProof(c, user, body, act) {
   const env = c.env;
-  const PASSWORD_LOGIN = /^(1|true|yes|on)$/i.test(env.PASSWORD_LOGIN || '');
+
+  // Passkey proof (step-up authentication)
+  if (body.credential) {
+    const RP_ID = env.RP_ID || 'localhost';
+    const ORIGIN = env.ORIGIN || 'http://localhost:8080';
+
+    const ch = await takeChallenge(env.SESSIONS, text(body.cid));
+    if (ch?.kind !== 'login') {
+      doAudit(c, 'auth.proof.fail', { ok: false, uid: user.id, name: user.name, msg: 'challenge-expired', act });
+      return [null, c.json({ error: 'the passkey could not be verified', code: 'passkey' }, 403)];
+    }
+
+    const cred = await getPasskeyById(env.DB, body.credential?.id);
+    if (!cred || cred.user_id !== user.id) {
+      doAudit(c, 'auth.proof.fail', { ok: false, uid: user.id, name: user.name, msg: 'step-up-failed', act });
+      return [null, c.json({ error: 'the passkey could not be verified', code: 'passkey' }, 403)];
+    }
+
+    let v;
+    try {
+      v = await verifyAuthenticationResponse({
+        response: body.credential,
+        expectedChallenge: ch.challenge,
+        expectedOrigin: ORIGIN,
+        expectedRPID: RP_ID,
+        requireUserVerification: false,
+        credential: {
+          id: cred.id,
+          publicKey: base64urlToUint8Array(cred.public_key),
+          counter: cred.counter,
+          transports: JSON.parse(cred.transports || '[]'),
+        },
+      });
+    } catch (e) {
+      doAudit(c, 'auth.proof.fail', { ok: false, uid: user.id, name: user.name, msg: 'verify-error', act });
+      return [null, c.json({ error: verifyError(e, { rpId: RP_ID, origin: ORIGIN }) }, 403)];
+    }
+
+    if (!v.verified) {
+      doAudit(c, 'auth.proof.fail', { ok: false, uid: user.id, name: user.name, msg: 'not-verified', act });
+      return [null, c.json({ error: 'the passkey could not be verified', code: 'passkey' }, 403)];
+    }
+
+    await updatePasskeyCounter(
+      env.DB, cred.id,
+      v.authenticationInfo.newCounter,
+      new Date().toISOString(),
+    );
+    return ['passkey', null];
+  }
 
   // Password proof
+  const PASSWORD_LOGIN = /^(1|true|yes|on)$/i.test(env.PASSWORD_LOGIN || '');
   if (!PASSWORD_LOGIN || !user.pw_hash) {
-    return [false, c.json({ error: 'confirm with your passkey first', code: 'passkey-required' }, 403)];
+    return [null, c.json({ error: 'confirm with your passkey first', code: 'passkey-required' }, 403)];
   }
 
   const current = typeof body.current === 'string' ? body.current : '';
   if (!current) {
-    return [false, c.json({ error: 'enter your current password', code: 'current-required' }, 403)];
+    return [null, c.json({ error: 'enter your current password', code: 'current-required' }, 403)];
   }
 
   const addr = limitAddress(c.req);
@@ -71,8 +122,8 @@ async function requireProof(c, user, body, act) {
     checkBackoff(env.RATE_LIMITS, acctKey, acctOpts),
     checkBackoff(env.RATE_LIMITS, addrKey, addrOpts),
   ]);
-  if (acctState.locked) return [false, c.json({ error: 'too many attempts', code: 'locked', retryAfter: acctState.retryAfter }, 429)];
-  if (addrState.locked) return [false, c.json({ error: 'too many attempts', code: 'locked', retryAfter: addrState.retryAfter }, 429)];
+  if (acctState.locked) return [null, c.json({ error: 'too many attempts', code: 'locked', retryAfter: acctState.retryAfter }, 429)];
+  if (addrState.locked) return [null, c.json({ error: 'too many attempts', code: 'locked', retryAfter: addrState.retryAfter }, 429)];
 
   const result = await verifyPassword(current, user.pw_hash);
   if (!result.ok) {
@@ -81,11 +132,11 @@ async function requireProof(c, user, body, act) {
       failBackoff(env.RATE_LIMITS, addrKey, addrOpts),
     ]);
     doAudit(c, 'auth.proof.fail', { ok: false, uid: user.id, name: user.name, msg: 'bad-current', act });
-    return [false, c.json({ error: 'your current password is not right', code: 'current-wrong' }, 403)];
+    return [null, c.json({ error: 'your current password is not right', code: 'current-wrong' }, 403)];
   }
 
   await clearBackoff(env.RATE_LIMITS, acctKey);
-  return [true, null];
+  return ['password', null];
 }
 
 // ── Hono app ──────────────────────────────────────────────────────────────────
@@ -288,26 +339,20 @@ app.delete('/api/account/providers/:id', async (c) => {
   }
 
   // Check if this would leave the user with no way to sign in
-  const passkeys = await getPasskeysByUser(env.DB, user.id);
-  const PASSWORD_LOGIN = /^(1|true|yes|on)$/i.test(env.PASSWORD_LOGIN || '');
-  const hasPassword = PASSWORD_LOGIN && !!user.pw_hash;
+  // auth_providers is the source of truth for all linked methods
   const otherProviders = providers.filter(p => p.id !== providerId).length;
 
-  // Total ways in: passkeys + password (if enabled) + other providers
-  // We need at least one way to sign in after removal
-  const waysIn = passkeys.length + (hasPassword && provider.provider !== 'password' ? 1 : 0) + otherProviders;
-
-  if (waysIn < 1) {
+  if (otherProviders < 1) {
     return c.json({ error: 'cannot remove the last way to sign in', code: 'last-way-in' }, 409);
   }
 
-  // If removing password provider, also need to verify with proof
-  if (provider.provider === 'password') {
-    // Must have passkey to remove password
-    if (passkeys.length === 0) {
-      return c.json({ error: 'add a passkey before removing password', code: 'passkey-required' }, 403);
-    }
-  }
+  // Require proof of ownership before allowing unlink
+  const [proof, failResp] = await requireProof(c, user, body, 'provider-unlink');
+  if (failResp) return failResp;
+
+  // Re-verify session after async proof validation
+  const fresh = await getSession(c);
+  if (!fresh || fresh.user.id !== user.id) return c.json({ error: 'not signed in' }, 401);
 
   // Delete the provider
   await deleteAuthProvider(env.DB, providerId);
