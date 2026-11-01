@@ -71,3 +71,7 @@ new_sqlite_classes = ["RestTimerDO"]
 
 [triggers]
 crons = ["* * * * *"]
+
+[observability.logs]
+enabled = true
+invocation_logs = true
