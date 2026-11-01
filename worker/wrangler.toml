@@ -4,6 +4,13 @@ compatibility_date = "2024-01-01"
 account_id = "987ae10a695c542653fd42b42216779c"
 workers_dev = true
 
+# Static assets — the built React frontend
+[assets]
+directory = "../frontend/dist"
+# Serve index.html for all unmatched paths (React router handles the rest)
+not_found_handling = "single-page-application"
+html_handling = "auto-trailing-slash"
+
 [vars]
 LOG_LEVEL = "debug"
 RP_ID = "fitness-app-dvv.pages.dev"
