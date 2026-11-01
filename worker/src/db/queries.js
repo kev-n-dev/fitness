@@ -228,3 +228,129 @@ export async function putVapidKeys(db, publicKey, privateKey) {
      ON CONFLICT(id) DO UPDATE SET public_key = excluded.public_key, private_key = excluded.private_key`
   ).bind(publicKey, privateKey).run();
 }
+
+// ── friendships ───────────────────────────────────────────────────────────────
+
+export async function getFriendship(db, userId, friendId) {
+  // Check both directions since friendship is bidirectional
+  return db.prepare(
+    `SELECT * FROM friendships WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)`
+  ).bind(userId, friendId, friendId, userId).first();
+}
+
+export async function createFriendship(db, userId, friendId, created) {
+  // Store friendship in both directions for easy lookup
+  const batch = [
+    db.prepare('INSERT INTO friendships (user_id, friend_id, created, status) VALUES (?, ?, ?, ?)').bind(userId, friendId, created, 'accepted'),
+    db.prepare('INSERT INTO friendships (user_id, friend_id, created, status) VALUES (?, ?, ?, ?)').bind(friendId, userId, created, 'accepted'),
+  ];
+  return db.batch(batch);
+}
+
+export async function deleteFriendship(db, userId, friendId) {
+  // Delete both directions
+  const batch = [
+    db.prepare('DELETE FROM friendships WHERE user_id = ? AND friend_id = ?').bind(userId, friendId),
+    db.prepare('DELETE FROM friendships WHERE user_id = ? AND friend_id = ?').bind(friendId, userId),
+  ];
+  return db.batch(batch);
+}
+
+export async function getFriendsByUser(db, userId) {
+  const { results } = await db.prepare(
+    `SELECT u.id, u.name, u.created, f.created AS friendship_created
+     FROM friendships f
+     JOIN users u ON f.friend_id = u.id
+     WHERE f.user_id = ?
+     ORDER BY f.created DESC`
+  ).bind(userId).all();
+  return results;
+}
+
+// ── friend_requests ───────────────────────────────────────────────────────────
+
+export async function createFriendRequest(db, row) {
+  return db.prepare(
+    `INSERT INTO friend_requests (id, from_user_id, to_user_id, status, created, updated)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    row.id,
+    row.from_user_id,
+    row.to_user_id,
+    row.status ?? 'pending',
+    row.created,
+    row.updated
+  ).run();
+}
+
+export async function getFriendRequestById(db, id) {
+  return db.prepare('SELECT * FROM friend_requests WHERE id = ?').bind(id).first();
+}
+
+export async function getPendingFriendRequests(db, userId) {
+  // Get both incoming and outgoing pending requests
+  const { results } = await db.prepare(
+    `SELECT fr.*, 
+            sender.id AS sender_id, sender.name AS sender_name,
+            receiver.id AS receiver_id, receiver.name AS receiver_name
+     FROM friend_requests fr
+     JOIN users sender ON fr.from_user_id = sender.id
+     JOIN users receiver ON fr.to_user_id = receiver.id
+     WHERE (fr.to_user_id = ? OR fr.from_user_id = ?) AND fr.status = 'pending'
+     ORDER BY fr.created DESC`
+  ).bind(userId, userId).all();
+  return results;
+}
+
+export async function updateFriendRequest(db, id, fields) {
+  const keys = Object.keys(fields);
+  if (!keys.length) return;
+  const sets = keys.map(k => `${k} = ?`).join(', ');
+  const vals = keys.map(k => fields[k]);
+  return db.prepare(`UPDATE friend_requests SET ${sets} WHERE id = ?`).bind(...vals, id).run();
+}
+
+export async function getExistingFriendRequest(db, fromUserId, toUserId) {
+  return db.prepare(
+    `SELECT * FROM friend_requests 
+     WHERE ((from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?))
+     AND status = 'pending'`
+  ).bind(fromUserId, toUserId, toUserId, fromUserId).first();
+}
+
+// ── friend_invite_codes ───────────────────────────────────────────────────────
+
+export async function createFriendInviteCode(db, row) {
+  return db.prepare(
+    `INSERT INTO friend_invite_codes (code, user_id, created, expires, used_by, used_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    row.code,
+    row.user_id,
+    row.created,
+    row.expires,
+    row.used_by ?? null,
+    row.used_at ?? null
+  ).run();
+}
+
+export async function getFriendInviteCode(db, code) {
+  return db.prepare('SELECT * FROM friend_invite_codes WHERE code = ?').bind(code).first();
+}
+
+export async function useFriendInviteCode(db, code, usedBy, usedAt) {
+  return db.prepare(
+    'UPDATE friend_invite_codes SET used_by = ?, used_at = ? WHERE code = ?'
+  ).bind(usedBy, usedAt, code).run();
+}
+
+// ── user search ───────────────────────────────────────────────────────────────
+
+export async function searchUsersByName(db, query, limit = 20) {
+  const { results } = await db.prepare(
+    `SELECT id, name, created FROM users 
+     WHERE name LIKE ? COLLATE NOCASE AND disabled = 0
+     LIMIT ?`
+  ).bind('%' + query + '%', limit).all();
+  return results;
+}
