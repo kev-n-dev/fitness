@@ -1,0 +1,730 @@
+/* ============================================================================
+   openGym — Responsive Enhancements
+   ----------------------------------------------------------------------------
+   Enhanced desktop/mobile layouts using the existing design system tokens.
+   
+   BREAKPOINTS:
+   - Mobile:  < 600px  (compact phone layouts)
+   - Tablet:  600px – 999px (medium screens, transitional)
+   - Desktop: ≥ 1000px (two-column layouts, floating UI)
+   - Wide:    ≥ 1400px (extra breathing room on large monitors)
+   
+   Import this file AFTER index.css to layer enhancements on top.
+   ========================================================================== */
+
+/* ============================================================================
+   TABLET BREAKPOINT (600px – 999px)
+   A transitional zone: larger than a phone but not yet desktop.
+   ========================================================================== */
+@media (min-width: 600px) and (max-width: 999px) {
+  /* Widen the app container for tablets */
+  #app {
+    max-width: 720px;
+    padding-inline: 24px;
+  }
+
+  .conn-row {
+    max-width: 720px;
+  }
+
+  /* Cards get more breathing room */
+  .card {
+    padding: 20px;
+  }
+
+  /* Header scales up slightly */
+  .hdr h1 {
+    font-size: 38px;
+  }
+
+  /* Lists stay single column but with better spacing */
+  .list {
+    gap: 10px;
+  }
+
+  /* Week strip days get roomier */
+  .wday {
+    padding: 10px 4px 12px;
+  }
+  .wday .num {
+    font-size: 19px;
+  }
+
+  /* Buttons scale up for easier touch */
+  .btn {
+    padding: 16px 20px;
+    font-size: 18px;
+  }
+  .btn.sm {
+    padding: 10px 16px;
+  }
+
+  /* Icon buttons grow slightly */
+  .iconbtn {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  /* Settings rows get more height */
+  .lrow {
+    padding: 13px 16px;
+    min-height: 50px;
+  }
+
+  /* Tab bar scales up */
+  #tabbar {
+    padding: 9px 12px calc(8px + var(--sab));
+  }
+  #tabbar button {
+    font-size: 11px;
+  }
+  #tabbar button .icn {
+    font-size: 27px;
+  }
+
+  /* Sheets are wider */
+  .sheet {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  /* Check-in cards show two at a time */
+  .ci-rail {
+    gap: 16px;
+  }
+  .ci-card {
+    flex: 0 0 calc(50% - 8px);
+    scroll-snap-align: start;
+  }
+  .ci-add {
+    flex: 0 0 calc(50% - 8px);
+  }
+
+  /* Plan view gets better spacing */
+  .plan-day-n {
+    min-width: 36px;
+    font-size: 16px;
+  }
+
+  /* Stats cards in a row when space allows */
+  .stats-summary {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* Avatar builder side by side */
+  .avatar-main {
+    flex-direction: row;
+  }
+  .avatar-view {
+    max-width: 320px;
+  }
+  .avatar-body-section {
+    max-width: 320px;
+  }
+
+  /* Duration wheel picker wider */
+  .dw {
+    max-width: 380px;
+  }
+
+  /* Workout set rows get more room */
+  .setrow {
+    padding-inline: 8px;
+  }
+
+  /* Exercise media larger on tablets */
+  .exmedia img,
+  .exmedia video {
+    height: 320px;
+  }
+}
+
+/* ============================================================================
+   DESKTOP ENHANCEMENTS (≥ 1000px)
+   Extends the existing @media (min-width: 1000px) block in index.css.
+   ========================================================================== */
+@media (min-width: 1000px) {
+  /* Better hover states for desktop */
+  .item:hover {
+    background: var(--surface-2);
+    transition: background var(--fast);
+  }
+  .lrow.tap:hover {
+    background: color-mix(in srgb, var(--surface-2) 60%, var(--surface));
+  }
+  .btn:hover:not(:disabled) {
+    filter: brightness(1.05);
+    transition: filter var(--fast);
+  }
+  .btn.primary:hover:not(:disabled) {
+    background: var(--acc-2);
+  }
+  .iconbtn:hover {
+    background: var(--surface-2);
+  }
+  .chip:hover {
+    background: var(--surface-2);
+  }
+
+  /* Cards get subtle hover lift */
+  .card {
+    transition: transform var(--fast) var(--ease), box-shadow var(--fast);
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.2);
+  }
+  /* Disable hover lift for cards with interactive content */
+  .card:has(.btn):hover,
+  .card:has(input):hover,
+  .card:has(.stp):hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* Week strip hover */
+  .wday:hover {
+    background: var(--surface);
+  }
+
+  /* Check-in cards: grid layout on desktop */
+  .ci-rail {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    overflow-x: visible;
+    scroll-snap-type: none;
+    margin: 0;
+    padding: 4px 0 8px;
+  }
+  .ci-card,
+  .ci-add {
+    flex: none;
+    scroll-snap-align: none;
+  }
+  .ci-dots {
+    display: none; /* dots not needed in grid layout */
+  }
+
+  /* Plan view: schedule and routines side by side */
+  .plan-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  /* Settings root: two columns of setting groups */
+  .sp-root-sections {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .sp-root-sections > .sect {
+    margin-bottom: 0;
+  }
+
+  /* Duration wheel picker centered with max width */
+  .dw {
+    max-width: 400px;
+  }
+
+  /* History list: timeline layout */
+  .history-list {
+    position: relative;
+    padding-left: 24px;
+  }
+  .history-list::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--surface-3);
+    border-radius: 1px;
+  }
+  .history-item {
+    position: relative;
+  }
+  .history-item::before {
+    content: '';
+    position: absolute;
+    left: -20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--acc);
+    border: 2px solid var(--bg);
+  }
+
+  /* Stats page: dashboard layout */
+  .stats-dashboard {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  .stats-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .stats-sidebar {
+    position: sticky;
+    top: calc(var(--sat) + var(--conn) + 16px);
+  }
+
+  /* Library: filter sidebar on desktop */
+  .library-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  .library-filters {
+    position: sticky;
+    top: calc(var(--sat) + var(--conn) + 16px);
+    background: var(--surface);
+    border-radius: var(--r-card);
+    padding: 16px;
+  }
+  .library-filters .sect {
+    margin-bottom: 16px;
+  }
+  .library-filters .sect:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Workout view: wider set cards */
+  .workout-layout {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  /* Focus mode: larger display */
+  .focus-layout {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .focus-main {
+    font-size: 120%;
+  }
+
+  /* Modal sheets: centered with shadow */
+  .sheet {
+    box-shadow: 0 -10px 60px -10px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Tooltip-style hover info */
+  [data-tooltip] {
+    position: relative;
+  }
+  [data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 10px;
+    background: var(--surface-2);
+    color: var(--label);
+    font-size: 13px;
+    border-radius: var(--r-sm);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    animation: tooltipFadeIn var(--fast) var(--ease) forwards;
+    animation-delay: 0.3s;
+  }
+  @keyframes tooltipFadeIn {
+    to { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+  }
+}
+
+/* ============================================================================
+   WIDE DESKTOP (≥ 1400px)
+   Extra space for power users on large monitors.
+   ========================================================================== */
+@media (min-width: 1400px) {
+  #app {
+    max-width: 1280px;
+  }
+
+  /* Three columns for lists on very wide screens */
+  #app .list:not(.routine-list) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Wider sheets */
+  .sheet {
+    width: 720px;
+    margin-left: -360px;
+  }
+
+  /* Check-in cards: more columns */
+  .ci-rail {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+
+  /* Settings: three columns */
+  .sp-root-sections {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Library filters wider */
+  .library-layout {
+    grid-template-columns: 280px 1fr;
+  }
+}
+
+/* ============================================================================
+   COMPACT MOBILE (< 360px)
+   Extra small phones need tighter layouts.
+   ========================================================================== */
+@media (max-width: 359px) {
+  /* Reduce padding */
+  #app {
+    padding-inline: 12px;
+  }
+
+  /* Smaller cards */
+  .card {
+    padding: 12px;
+    border-radius: var(--r);
+  }
+
+  /* Compact header */
+  .hdr {
+    margin: 4px 0 14px;
+  }
+  .hdr h1 {
+    font-size: 26px;
+  }
+
+  /* Smaller icon buttons */
+  .iconbtn {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  /* Tighter list items */
+  .item {
+    padding: 8px 10px;
+    min-height: 52px;
+    gap: 10px;
+  }
+
+  /* Settings rows */
+  .lrow {
+    padding: 9px 12px;
+    gap: 10px;
+  }
+
+  /* Tab bar compact */
+  #tabbar {
+    padding: 5px 4px calc(4px + var(--sab));
+  }
+  #tabbar button {
+    font-size: 9px;
+    gap: 2px;
+  }
+  #tabbar button .icn {
+    font-size: 22px;
+  }
+  #tabbar button.start .cir {
+    width: 46px;
+    height: 46px;
+  }
+
+  /* Week strip compact */
+  .wday {
+    padding: 6px 1px 7px;
+  }
+  .wday .lbl {
+    font-size: 10px;
+  }
+  .wday .num {
+    font-size: 15px;
+  }
+  .wday.today .num {
+    width: 27px;
+    height: 27px;
+  }
+
+  /* Segmented control */
+  .seg button {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  /* Chips */
+  .chip {
+    padding: 5px 10px;
+    font-size: 13px;
+  }
+
+  /* Plan day names */
+  .plan-day-n {
+    min-width: 24px;
+    font-size: 13px;
+  }
+}
+
+/* ============================================================================
+   TOUCH vs POINTER DEVICE OPTIMIZATIONS
+   ========================================================================== */
+
+/* Pointer devices (mouse/trackpad) */
+@media (hover: hover) and (pointer: fine) {
+  /* Smaller touch targets OK for mouse */
+  .iconbtn::before,
+  .chip::before,
+  .seg button::before,
+  .helpbtn::before {
+    inset: -4px; /* smaller hit area extension */
+  }
+
+  /* Cursor changes */
+  .item,
+  .lrow.tap,
+  .wday,
+  .chip,
+  .tile {
+    cursor: pointer;
+  }
+
+  /* Scrollbars visible on hover */
+  .ci-rail:hover::-webkit-scrollbar,
+  .dw-scroll:hover::-webkit-scrollbar {
+    display: block;
+    width: 6px;
+  }
+  .ci-rail::-webkit-scrollbar-thumb,
+  .dw-scroll::-webkit-scrollbar-thumb {
+    background: var(--surface-3);
+    border-radius: 3px;
+  }
+}
+
+/* Touch devices */
+@media (hover: none) and (pointer: coarse) {
+  /* Ensure minimum touch targets */
+  .iconbtn,
+  .chip,
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Disable hover effects that feel wrong on touch */
+  .card:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  .item:hover,
+  .lrow.tap:hover {
+    background: inherit;
+  }
+
+  /* Active states instead of hover */
+  .item:active,
+  .lrow.tap:active {
+    background: var(--surface-2);
+  }
+}
+
+/* ============================================================================
+   LANDSCAPE PHONE ADJUSTMENTS
+   ========================================================================== */
+@media (max-height: 500px) and (orientation: landscape) {
+  /* Reduce vertical padding */
+  #app {
+    padding-top: calc(var(--sat) + var(--conn) + 4px);
+    padding-bottom: calc(60px + var(--sab));
+  }
+
+  /* Compact header */
+  .hdr {
+    margin: 4px 0 12px;
+  }
+  .hdr h1 {
+    font-size: 28px;
+  }
+
+  /* Tab bar thinner */
+  #tabbar {
+    padding: 4px 6px calc(4px + var(--sab));
+  }
+  #tabbar button.start {
+    margin-top: -20px;
+  }
+  #tabbar button.start .cir {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Timer compact */
+  #timer {
+    padding: 10px var(--pad) calc(8px + var(--sab));
+  }
+
+  /* Sheets shorter */
+  .sheet {
+    max-height: 85vh;
+  }
+
+  /* Duration wheel shorter */
+  .dw {
+    --dw-item: 32px;
+    margin: 2px auto 10px;
+  }
+
+  /* Exercise media shorter */
+  .exmedia img,
+  .exmedia video {
+    height: 200px;
+  }
+}
+
+/* ============================================================================
+   PRINT STYLES
+   ========================================================================== */
+@media print {
+  /* Hide interactive elements */
+  #tabbar,
+  #timer,
+  .conn-bar,
+  .btn,
+  .iconbtn,
+  .sheet,
+  .toast {
+    display: none !important;
+  }
+
+  /* Reset colors for print */
+  :root {
+    --bg: #ffffff;
+    --surface: #f5f5f5;
+    --surface-2: #eeeeee;
+    --label: #000000;
+    --label-2: #333333;
+    --label-3: #666666;
+  }
+
+  /* Full width */
+  #app {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  /* No animations */
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Cards print with borders instead of shadows */
+  .card,
+  .item {
+    border: 1px solid #ddd;
+    box-shadow: none;
+  }
+
+  /* Page breaks */
+  .card,
+  .item,
+  .sect {
+    break-inside: avoid;
+  }
+  .hdr {
+    break-after: avoid;
+  }
+}
+
+/* ============================================================================
+   UTILITY CLASSES FOR RESPONSIVE VISIBILITY
+   ========================================================================== */
+
+/* Hide on mobile (< 600px) */
+.hide-mobile {
+  display: inherit;
+}
+@media (max-width: 599px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Hide on tablet (600px – 999px) */
+@media (min-width: 600px) and (max-width: 999px) {
+  .hide-tablet {
+    display: none !important;
+  }
+}
+
+/* Hide on desktop (≥ 1000px) */
+@media (min-width: 1000px) {
+  .hide-desktop {
+    display: none !important;
+  }
+}
+
+/* Show only on mobile */
+.show-mobile {
+  display: none !important;
+}
+@media (max-width: 599px) {
+  .show-mobile {
+    display: inherit !important;
+  }
+}
+
+/* Show only on tablet */
+.show-tablet {
+  display: none !important;
+}
+@media (min-width: 600px) and (max-width: 999px) {
+  .show-tablet {
+    display: inherit !important;
+  }
+}
+
+/* Show only on desktop */
+.show-desktop {
+  display: none !important;
+}
+@media (min-width: 1000px) {
+  .show-desktop {
+    display: inherit !important;
+  }
+}
+
+/* Stack on mobile, row on larger */
+.stack-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+@media (min-width: 600px) {
+  .stack-mobile {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* Full width on mobile only */
+.full-mobile {
+  width: auto;
+}
+@media (max-width: 599px) {
+  .full-mobile {
+    width: 100%;
+  }
+}
