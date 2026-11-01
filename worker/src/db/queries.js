@@ -27,8 +27,9 @@ export async function countUsers(db) {
 
 export async function createUser(db, user) {
   return db.prepare(
-    `INSERT INTO users (id, name, created, disabled, admin, invited_by, sv, email, pw_hash, pw_set)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO users (id, name, created, disabled, admin, invited_by, sv, email, pw_hash, pw_set,
+       google_id, google_access_token, google_refresh_token, google_token_expires, google_fit_enabled)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     user.id,
     user.name,
@@ -39,7 +40,12 @@ export async function createUser(db, user) {
     user.sv ?? 0,
     user.email ?? null,
     user.pw_hash ?? null,
-    user.pw_set ?? null
+    user.pw_set ?? null,
+    user.google_id ?? null,
+    user.google_access_token ?? null,
+    user.google_refresh_token ?? null,
+    user.google_token_expires ?? null,
+    user.google_fit_enabled ?? 0
   ).run();
 }
 
