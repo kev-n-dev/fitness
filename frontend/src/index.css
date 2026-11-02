@@ -2489,3 +2489,153 @@ button.wl-summary{width:100%;padding:0 0 10px;text-align:start;border-radius:var
   font-size:12px;color:var(--label-3);
 }
 .feed-item-meta .lrow-i{display:inline-flex}
+
+/* ──────────────────────────────────────────────────────── Auth Page (Login) ── */
+/* Clean, hierarchical login/signup page with clear visual structure */
+
+.auth-page{
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  min-height:78vh;text-align:center;
+}
+.auth-logo{
+  font-size:54px;display:flex;justify-content:center;color:var(--acc);
+  margin-bottom:10px;
+}
+.auth-title{
+  font-size:34px;font-weight:700;letter-spacing:-.028em;
+  margin:0 0 4px;
+}
+.auth-tagline{
+  margin-bottom:32px;
+}
+
+/* Section containers */
+.auth-section{
+  width:100%;max-width:340px;
+}
+.auth-section-label{
+  font-size:12px;font-weight:500;color:var(--label-3);
+  text-transform:uppercase;letter-spacing:.06em;
+  margin-bottom:10px;
+}
+
+/* Divider with text */
+.auth-divider{
+  display:flex;align-items:center;gap:14px;
+  width:100%;max-width:340px;
+  margin:20px 0;
+}
+.auth-divider-line{
+  flex:1;height:1px;background:var(--sep);
+}
+.auth-divider-text{
+  font-size:13px;color:var(--label-3);font-weight:500;
+  white-space:nowrap;
+}
+
+/* Secondary sign-in row (password + google side by side) */
+.auth-secondary-row{
+  display:flex;gap:10px;
+}
+.auth-secondary-row .btn,
+.auth-secondary-btn{
+  flex:1;
+}
+
+/* Tertiary actions (device link, guest mode) */
+.auth-tertiary{
+  display:flex;flex-direction:column;gap:8px;
+  width:100%;max-width:340px;
+  margin-top:20px;
+}
+.auth-tertiary-link{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:10px 16px;border-radius:var(--r);
+  font-size:14px;color:var(--label-3);
+  transition:background var(--fast),color var(--fast);
+}
+.auth-tertiary-link:active{
+  background:var(--surface);color:var(--label-2);
+}
+.auth-tertiary-link .icn{
+  font-size:16px;
+}
+
+/* Footer info text */
+.auth-footer{
+  font-size:13px;line-height:1.5;color:var(--label-3);
+  margin-top:28px;max-width:340px;
+}
+
+/* Method selection cards in registration */
+.auth-method-card{
+  display:flex;align-items:center;gap:14px;
+  width:100%;padding:14px 16px;
+  background:var(--surface);border-radius:var(--r-card);
+  text-align:left;
+  transition:background var(--fast),transform var(--fast);
+}
+.auth-method-card:active{
+  background:var(--surface-2);transform:scale(.98);
+}
+.auth-method-card.recommended{
+  border:1.5px solid var(--acc-line);
+}
+.auth-method-icon{
+  width:42px;height:42px;border-radius:11px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;background:var(--surface-2);color:var(--label);
+  flex:none;
+}
+.auth-method-card.recommended .auth-method-icon{
+  background:var(--acc-soft);color:var(--acc);
+}
+.auth-method-content{
+  flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;
+}
+.auth-method-title{
+  font-size:16px;font-weight:600;letter-spacing:-.01em;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+}
+.auth-method-badge{
+  font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+  padding:3px 7px;border-radius:4px;
+  background:var(--acc);color:var(--on-acc);
+}
+.auth-method-desc{
+  font-size:13px;color:var(--label-2);line-height:1.35;
+}
+.auth-method-chevron{
+  font-size:16px;color:var(--label-3);flex:none;--icon-stroke:2.2;
+}
+
+/* Step indicator for multi-step registration */
+.auth-step-indicator{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-bottom:14px;font-size:12px;color:var(--label-3);
+}
+.auth-step{
+  padding:4px 10px;border-radius:99px;
+  background:var(--surface-2);
+  transition:background var(--fast),color var(--fast);
+}
+.auth-step.active{
+  background:var(--acc-soft);color:var(--acc);font-weight:500;
+}
+.auth-step.done{
+  background:var(--acc);color:var(--on-acc);font-weight:600;
+  cursor:pointer;
+}
+.auth-step-sep{
+  color:var(--label-4);
+}
+
+/* Button outline variant for Google login */
+.btn.outline{
+  background:transparent;
+  border:1.5px solid var(--surface-3);
+  color:var(--label);
+}
+.btn.outline:active{
+  background:var(--surface);
+}

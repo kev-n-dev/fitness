@@ -36,12 +36,14 @@ function GoogleLogo({ size = 18 }) {
  * @param {string} [props.returnTo='/'] - URL to redirect to after login
  * @param {string} [props.label] - Custom button label
  * @param {string} [props.className] - Additional CSS classes
+ * @param {boolean} [props.compact=false] - Show compact version with shorter label
  */
 export default function GoogleLoginButton({
   requestFit = false,
   returnTo = '/',
   label,
   className,
+  compact = false,
   ...rest
 }) {
   const handleClick = () => {
@@ -52,9 +54,11 @@ export default function GoogleLoginButton({
     window.location.href = url.toString()
   }
 
-  const buttonLabel = label || (requestFit
-    ? t('Sign in with Google & connect Fit')
-    : t('Sign in with Google'))
+  const buttonLabel = label || (compact
+    ? t('Google')
+    : requestFit
+      ? t('Sign in with Google & connect Fit')
+      : t('Sign in with Google'))
 
   return (
     <Button
@@ -69,7 +73,7 @@ export default function GoogleLoginButton({
       }}
       {...rest}
     >
-      <GoogleLogo />
+      <GoogleLogo size={compact ? 16 : 18} />
       {buttonLabel}
     </Button>
   )
