@@ -1,6 +1,6 @@
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
-import { webauthnOK, passkeyLogin, passkeyRegister, passkeyError, bio } from '../lib/api.js'
+import { webauthnOK, passkeyLogin, passkeyRegister, passkeyError, bio, getLinkedProviders } from '../lib/api.js'
 import { hasData } from '../store/useStore.js'
 import { t } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
@@ -16,6 +16,21 @@ import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
 // Check if Google login is enabled in the config
 function googleOn(config) {
   return !!config?.google_login
+}
+
+// Show a tip toast suggesting linking additional auth methods if the user only has one
+async function showLinkTipIfNeeded() {
+  try {
+    const r = await getLinkedProviders()
+    if (r?.providers?.length === 1) {
+      // Delay the tip slightly so it appears after the welcome toast
+      setTimeout(() => {
+        useUI.getState().toast(t('Tip: Add a backup sign-in method in Settings → Account'))
+      }, 3500)
+    }
+  } catch {
+    // Ignore errors - this is just a helpful tip
+  }
 }
 
 function RegisterSheet({ close }) {
@@ -79,8 +94,18 @@ export default function Login() {
   const googleEnabled = googleOn(config)
   const register = () => useUI.getState().openSheet(close => <RegisterSheet close={close} />)
   const signIn = async () => {
-    try { const u = await passkeyLogin(); setUser(u, { adopt: true }); await adoptProfile(askAddDeviceData); useUI.getState().toast(t('Welcome back, {0}', u.name)) }
-    catch (e) { if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') useUI.getState().toast(passkeyError(e, t('Sign-in failed'))) }
+    try {
+      const u = await passkeyLogin()
+      setUser(u, { adopt: true })
+      await adoptProfile(askAddDeviceData)
+      useUI.getState().toast(t('Welcome back, {0}', u.name))
+      // Show tip about linking additional auth methods if user has only one
+      showLinkTipIfNeeded()
+    } catch (e) {
+      if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') {
+        useUI.getState().toast(passkeyError(e, t('Sign-in failed')))
+      }
+    }
   }
   const head = <>
     <div style={{ fontSize: 54, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="dumbbell" /></div>

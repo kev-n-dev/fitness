@@ -12,7 +12,7 @@ import { useStore, hasData } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
 import { t } from '../lib/i18n.js'
 import { dateLocale } from '../lib/i18n-core.js'
-import { api, webauthnOK, passkeyAssertion, passwordLogin, passwordRegister, passwordResetRedeem } from '../lib/api.js'
+import { api, webauthnOK, passkeyAssertion, passwordLogin, passwordRegister, passwordResetRedeem, getLinkedProviders } from '../lib/api.js'
 import { askAddDeviceData } from '../sheets.jsx'
 import { Row, Button } from './ui.jsx'
 
@@ -69,6 +69,21 @@ export function passwordError(e) {
 // A passkey prompt the person closed is their answer, not an error worth a line in red.
 const dismissed = e => e?.name === 'NotAllowedError' || e?.name === 'AbortError'
 
+// Show a tip toast suggesting linking additional auth methods if the user only has one
+async function showLinkTipIfNeeded() {
+  try {
+    const r = await getLinkedProviders()
+    if (r?.providers?.length === 1) {
+      // Delay the tip slightly so it appears after the welcome toast
+      setTimeout(() => {
+        toast(t('Tip: Add a backup sign-in method in Settings → Account'))
+      }, 3500)
+    }
+  } catch {
+    // Ignore errors - this is just a helpful tip
+  }
+}
+
 // Signed in: the same steps as a passkey sign-in (Login.jsx) — and the same account coming back
 // merges what this device kept for it (adoptProfile).
 async function signedIn(u, close) {
@@ -77,6 +92,8 @@ async function signedIn(u, close) {
   close()
   await st.adoptProfile(askAddDeviceData)
   toast(t('Welcome back, {0}', u.name))
+  // Show tip about linking additional auth methods if user has only one
+  showLinkTipIfNeeded()
 }
 
 const field = { autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false }
