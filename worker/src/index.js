@@ -12,6 +12,7 @@ import syncRoutes from './routes/sync.js';
 import pushRoutes from './routes/push.js';
 import adminRoutes, { reminderTick } from './routes/admin.js';
 import mediaRoutes from './routes/media.js';
+import feedRoutes from './routes/feed.js';
 export { RestTimerDO } from './durable/rest-timer.js';
 
 const log = createLogger('worker');
@@ -103,6 +104,7 @@ app.route('/', syncRoutes);
 app.route('/', pushRoutes);
 app.route('/', adminRoutes);
 app.route('/', mediaRoutes);
+app.route('/', feedRoutes);
 
 // ── Default export ────────────────────────────────────────────────────────────
 export default {
