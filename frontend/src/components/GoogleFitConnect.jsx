@@ -49,7 +49,7 @@ export default function GoogleFitConnect({ onStatusChange }) {
   const handleConnect = () => {
     // Redirect to Google OAuth with fit=1 to request fitness scopes
     const base = appBase().replace(/\/$/, '')
-    const url = new URL(`${base}/api/auth/google`)
+    const url = new URL(`${base}/api/auth/google`, window.location.origin)
     url.searchParams.set('fit', '1')
     url.searchParams.set('return_to', '/settings/data')
     window.location.href = url.toString()

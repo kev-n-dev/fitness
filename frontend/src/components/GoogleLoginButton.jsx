@@ -48,7 +48,8 @@ export default function GoogleLoginButton({
 }) {
   const handleClick = () => {
     const base = appBase().replace(/\/$/, '')
-    const url = new URL(`${base}/api/auth/google`)
+    // Use window.location.origin as the base for URL constructor
+    const url = new URL(`${base}/api/auth/google`, window.location.origin)
     if (requestFit) url.searchParams.set('fit', '1')
     if (returnTo && returnTo !== '/') url.searchParams.set('return_to', returnTo)
     window.location.href = url.toString()
