@@ -2500,6 +2500,7 @@ const routes = {
   // except with reason `hidden`, which marks it away (see PRESENCE_HIDDEN_GRACE). `navigated`,
   // `closed`, and no reason at all (older clients), drop it at once.
   'POST /api/activity': async (req, res) => {
+    const user = readSession(req);
     if (!user) return json(res, 401, { error: 'not signed in' });
     const body = await readBody(req);
     if (body.active) {
