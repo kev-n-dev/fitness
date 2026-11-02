@@ -1,6 +1,6 @@
-# Contributing to openGym
+# Contributing to SWIFT
 
-Thanks for taking a look. openGym is deliberately small and light on dependencies, and the aim is
+Thanks for taking a look. SWIFT is deliberately small and light on dependencies, and the aim is
 to keep it that way: easy to read, easy to self-host.
 
 ## Project layout
@@ -13,7 +13,7 @@ api/       Backend: server.js on plain node:http, two dependencies (@simplewebau
 web/       Multi-stage Dockerfile (builds the frontend, serves it with nginx) and the nginx template.
 mcp/       Optional read-only MCP server for LLM clients (Claude Desktop, Cursor, ...). Not in the
            Docker build; it only runs when a client spawns it. See mcp/README.md.
-website/   The static project site at opengym.ch.
+website/   The static project site.
 kubernetes/ Example manifests (docs/SELF_HOSTING_KUBERNETES.md).
 docs/      User and operator guides (index: docs/README.md); docs/dev/ has feature design notes.
 catalogue/ The exercise catalogue: one JSON file per exercise, translations in i18n/, and the
@@ -58,29 +58,19 @@ cd mcp && npm test
 
 ## Using AI tools
 
-openGym itself is developed with Claude Code (see
-[How openGym is built](README.md#how-opengym-is-built)), and [`CLAUDE.md`](CLAUDE.md) holds the
+SWIFT is developed with Claude Code (see
+[How SWIFT is built](README.md#how-swift-is-built)), and [`CLAUDE.md`](CLAUDE.md) holds the
 project context for it. You're welcome to use whatever tools you like for a pull request. The bar
 is the same either way: you understand the change, it's tested, and you can answer questions about
 it in review.
 
 ## What CI does with your pull request
 
-<p align="center">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/ci-dark.png">
-  <img src="docs/diagrams/ci.png" alt="CI path: pull request on GitHub, GitHub Actions tests and image builds, review and merge into main, mirror workflow pushes to GitLab, GitLab CI builds the signed APK, images and SBOMs, GHCR images on release." width="280">
-</picture>
-</p>
-
 A pull request runs the three test suites and builds and boots both api image targets. The APK and
-the published images come from GitLab CI on the mirror, built from `main` after the merge. If your
+the published images come from CI on the mirror, built from `main` after the merge. If your
 change needs an APK to be judged, say so in the pull request and a maintainer will run that build.
 A first-time contributor's workflows wait for a maintainer to approve them, so "no checks yet"
 just means nobody has pressed the button.
-
-Merge requests still open on the GitLab mirror are reviewed too and land on `main` here. New work
-should come as a GitHub pull request.
 
 ## Good first issues
 
@@ -95,12 +85,12 @@ should come as a GitHub pull request.
 
 | You have | Goes to |
 | --- | --- |
-| A quick question, or you'd rather chat | [Discord](https://discord.gg/e62jY6fwVb) |
-| A question, or self-hosting that won't behave | [Discussions → Q&A](https://github.com/DuarteSantos8/openGym/discussions/categories/q-a) |
-| An idea you're not sure about yet | [Discussions → Ideas](https://github.com/DuarteSantos8/openGym/discussions/categories/ideas) |
-| A reproducible bug | [Issues](https://github.com/DuarteSantos8/openGym/issues) |
-| A change you've already built | [A pull request](https://github.com/DuarteSantos8/openGym/pulls) |
-| A security problem | [Private report](https://github.com/DuarteSantos8/openGym/security/advisories/new), see [SECURITY.md](SECURITY.md) |
+| A quick question, or you'd rather chat | Discord |
+| A question, or self-hosting that won't behave | Discussions → Q&A |
+| An idea you're not sure about yet | Discussions → Ideas |
+| A reproducible bug | Issues |
+| A change you've already built | A pull request |
+| A security problem | Private report, see [SECURITY.md](SECURITY.md) |
 
 An answered question in Discussions is worth more than the same answer in a chat log, because the
 next person searching "passkey login fails behind my reverse proxy" finds it. If a Discord answer
@@ -116,6 +106,6 @@ login issues are an origin mismatch.
 
 Before your first pull request is merged, you sign the [Contributor License Agreement](CLA.md) once,
 by commenting the sentence the CLA check asks for on your pull request. It covers all your past and
-future contributions. You keep the copyright in your work; openGym may use and relicense it, which
+future contributions. You keep the copyright in your work; SWIFT may use and relicense it, which
 is what keeps the app possible in the App Store and Google Play long term. Every version released
 under the [GNU AGPL v3.0](LICENSE) stays available under it.

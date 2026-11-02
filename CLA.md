@@ -1,14 +1,14 @@
-# openGym Contributor License Agreement
+# SWIFT Contributor License Agreement
 
-Thank you for contributing to openGym. This agreement makes clear what rights you give the
-project when you contribute, so that openGym can keep being developed, published (including in
+Thank you for contributing to SWIFT. This agreement makes clear what rights you give the
+project when you contribute, so that SWIFT can keep being developed, published (including in
 app stores) and supported over the long term. Please read it once; signing takes a comment on
 your pull request.
 
-"We" and "us" means Duarte Santos, the maintainer of openGym, and any legal entity he forms or
-controls to continue the openGym project. "You" means the person signing this agreement.
+"We" and "us" means the maintainer of SWIFT, and any legal entity formed or
+controlled to continue the SWIFT project. "You" means the person signing this agreement.
 "Contribution" means any code, text, translation, documentation, design or other material you
-submit to the openGym project (for example by pull request, merge request, patch or issue), now,
+submit to the SWIFT project (for example by pull request, merge request, patch or issue), now,
 in the past or in the future.
 
 ## 1. You keep your rights
@@ -25,18 +25,18 @@ license them to others **under any terms, including the GNU AGPL v3, other open-
 and proprietary or commercial licences**. We may also remove or replace your Contributions at any
 time. 
 
-We may transfer this licence to a successor of the openGym project, for example a buyer of the
+We may transfer this licence to a successor of the SWIFT project, for example a buyer of the
 project or a company that continues it.
 
 ## 3. Patents
 
-You grant us and everyone who receives openGym from us a perpetual, worldwide, non-exclusive,
+You grant us and everyone who receives SWIFT from us a perpetual, worldwide, non-exclusive,
 royalty-free, irrevocable licence under any patents you hold that are necessarily infringed by
-your Contributions, to make, use, sell and distribute them as part of openGym.
+your Contributions, to make, use, sell and distribute them as part of SWIFT.
 
 ## 4. Our promise
 
-Every version of openGym that we publish under the GNU AGPL v3 stays available under it. Your
+Every version of SWIFT that we publish under the GNU AGPL v3 stays available under it. Your
 Contributions in those versions stay open for everyone, whatever else we do later.
 
 ## 5. What you confirm
@@ -56,7 +56,7 @@ You provide your Contributions as they are, without warranty of any kind.
 
 ## 8. Law
 
-This agreement is governed by Swiss law.
+This agreement is governed by applicable law.
 
 ---
 
@@ -64,4 +64,4 @@ This agreement is governed by Swiss law.
 
 > I have read the CLA Document and I hereby sign the CLA
 
-This covers all your past and future Contributions to openGym.
+This covers all your past and future Contributions to SWIFT.

@@ -1,7 +1,7 @@
 {
-  "name": "openGym",
-  "short_name": "openGym",
-  "description": "Personal gym & body weight tracker",
+  "name": "SWIFT",
+  "short_name": "SWIFT",
+  "description": "Social Workout, Inclusive Fitness Tracker",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
