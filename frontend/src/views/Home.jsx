@@ -17,6 +17,7 @@ import { glyphOf } from '../lib/glyphs.js'
 import { dayNoteOf } from '../lib/day-notes.js'
 import { getCachedVitals, healthReadStatus, enableHealthRead } from '../lib/health-read.js'
 import { MOBILE } from '../lib/mobile.js'
+import { googleFitStatus, googleFitSync } from '../lib/api.js'
 
 // Default daily water goal in ml — matches Nutrition.jsx DEFAULT_GOALS.water
 const DEFAULT_WATER_GOAL = 2500
@@ -182,6 +183,7 @@ export default function Home() {
   const [weekOffset, setWeekOffset] = useState(0)
   const [vitals, setVitals] = useState(null)
   const [hcStatus, setHcStatus] = useState(null)
+  const [googleFitData, setGoogleFitData] = useState(null)
 
   // Load Health Connect vitals (cached read — no network call).
   useEffect(() => {
@@ -189,6 +191,47 @@ export default function Home() {
     getCachedVitals().then(v => { if (v?.date === today) setVitals(v) }).catch(() => {})
     healthReadStatus().then(setHcStatus).catch(() => {})
   }, [])
+
+  // Load Google Fit data as fallback when not on mobile / Health Connect unavailable
+  useEffect(() => {
+    if (!user) return
+    // Only fetch Google Fit if we don't have Health Connect vitals
+    const loadGoogleFit = async () => {
+      try {
+        const status = await googleFitStatus()
+        if (status.connected && status.fit_enabled) {
+          // Get today's data
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          const startMs = today.getTime()
+          const endMs = Date.now()
+          const result = await googleFitSync({ start_ms: startMs, end_ms: endMs })
+          if (result.ok && result.data) {
+            // Sum up today's steps
+            const todayStr = new Date().toISOString().slice(0, 10)
+            const todaySteps = (result.data.steps || [])
+              .filter(d => d.date === todayStr)
+              .reduce((sum, d) => sum + (d.value || 0), 0)
+            const todayCalories = (result.data.calories || [])
+              .filter(d => d.date === todayStr)
+              .reduce((sum, d) => sum + (d.value || 0), 0)
+            const todayDistance = (result.data.distance || [])
+              .filter(d => d.date === todayStr)
+              .reduce((sum, d) => sum + (d.value || 0), 0)
+            setGoogleFitData({
+              steps: Math.round(todaySteps),
+              calories: Math.round(todayCalories),
+              distanceM: Math.round(todayDistance),
+              source: 'google-fit',
+            })
+          }
+        }
+      } catch (e) {
+        console.debug('Google Fit load failed:', e)
+      }
+    }
+    loadGoogleFit()
+  }, [user])
 
   const connectHealthRead = async () => {
     const result = await enableHealthRead(data => { if (data?.vitals) setVitals(data.vitals) })
@@ -445,13 +488,15 @@ export default function Home() {
       <GoalTile
         icon="steps"
         label={t('Steps today')}
-        value={(vitals?.steps || 0).toLocaleString()}
+        value={((vitals?.steps || googleFitData?.steps) || 0).toLocaleString()}
         sub={vitals
           ? `${t('Goal')} ${(S.stepGoal || 10000).toLocaleString()}`
+          : googleFitData
+          ? `${t('via Google Fit')} · ${t('Goal')} ${(S.stepGoal || 10000).toLocaleString()}`
           : t('Needs Health Connect')}
-        pct={((vitals?.steps || 0) / (S.stepGoal || 10000)) * 100}
-        color={vitals ? 'var(--teal)' : 'var(--label-3)'}
-        onClick={vitals ? undefined : (MOBILE ? connectHealthRead : undefined)}
+        pct={(((vitals?.steps || googleFitData?.steps) || 0) / (S.stepGoal || 10000)) * 100}
+        color={(vitals || googleFitData) ? 'var(--teal)' : 'var(--label-3)'}
+        onClick={(vitals || googleFitData) ? undefined : (MOBILE ? connectHealthRead : undefined)}
       />
 
       {/* Sleep — last night, from HC */}
@@ -498,6 +543,35 @@ export default function Home() {
 
     {/* ── Health Connect monitors ──────────────────────────────────────────── */}
     <HealthMonitorCard vitals={vitals} onNav={nav} />
+    {/* Google Fit monitors (when HC not available but Google Fit is) */}
+    {!vitals && googleFitData && (
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="row between" style={{ marginBottom: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 17 }}>{t('Health monitors')}</h2>
+          <span className="dim small">{t('via Google Fit')}</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12 }}>
+          {googleFitData.distanceM > 0 && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--teal)22', color: 'var(--teal)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                <Icon name="figureRun" />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>{(googleFitData.distanceM / 1000).toFixed(1)} km</div>
+              <div className="dim small">{t('Distance')}</div>
+            </div>
+          )}
+          {googleFitData.calories > 0 && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--orange)22', color: 'var(--orange)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                <Icon name="flame" />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>{googleFitData.calories} kcal</div>
+              <div className="dim small">{t('Burned')}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
     {MOBILE && hcStatus && !hcStatus.on && !vitals && (
       <ConnectHealthCard onConnect={connectHealthRead} />
     )}
