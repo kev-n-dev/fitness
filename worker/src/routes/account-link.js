@@ -178,11 +178,9 @@ app.post('/api/account/link/password', async (c) => {
     return c.json({ error: 'this account already has a password linked', code: 'already-linked' }, 409);
   }
 
-  // Must have at least one passkey to link a password (proof of ownership)
-  const passkeys = await getPasskeysByUser(env.DB, user.id);
-  if (passkeys.length === 0) {
-    return c.json({ error: 'add a passkey first before linking a password', code: 'passkey-required' }, 403);
-  }
+  // Require proof of ownership before allowing password link
+  const [, failResp] = await requireProof(c, user, body, 'password-link');
+  if (failResp) return failResp;
 
   // Validate the password
   const password = text(body.password);
