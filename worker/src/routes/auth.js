@@ -369,15 +369,19 @@ app.post('/api/register/verify', async (c) => {
     last_used: now,
   });
 
-  // Create auth_provider entry for the passkey
-  await createAuthProvider(env.DB, {
-    user_id: ch.uid,
-    provider: 'passkey',
-    provider_id: credential.id,
-    email: null,
-    created: now,
-    last_used: now,
-  });
+  // Create auth_provider entry for the passkey (non-blocking if table doesn't exist)
+  try {
+    await createAuthProvider(env.DB, {
+      user_id: ch.uid,
+      provider: 'passkey',
+      provider_id: credential.id,
+      email: null,
+      created: now,
+      last_used: now,
+    });
+  } catch {
+    // auth_providers table may not exist yet - migrations not applied
+  }
 
   if (invite) {
     await updateInvite(env.DB, invite.code, { used_by: user.id, used_at: now });
@@ -463,10 +467,14 @@ app.post('/api/login/verify', async (c) => {
     new Date().toISOString(),
   );
 
-  // Update last_used on the auth_provider entry for this passkey
-  const authProvider = await getAuthProviderByProviderAndId(env.DB, 'passkey', cred.id);
-  if (authProvider) {
-    await updateAuthProviderLastUsed(env.DB, authProvider.id, new Date().toISOString());
+  // Update last_used on the auth_provider entry for this passkey (non-blocking if table doesn't exist)
+  try {
+    const authProvider = await getAuthProviderByProviderAndId(env.DB, 'passkey', cred.id);
+    if (authProvider) {
+      await updateAuthProviderLastUsed(env.DB, authProvider.id, new Date().toISOString());
+    }
+  } catch {
+    // auth_providers table may not exist yet - migrations not applied
   }
 
   const user = await getUserById(env.DB, cred.user_id);
@@ -592,10 +600,14 @@ app.post('/api/login/password', async (c) => {
   const token = await makeSession(user.id, sv, days, env.SECRET);
   await storeSession(env.SESSIONS, token, user.id, sv, days);
 
-  // Update last_used on the auth_provider entry for password
-  const authProvider = await getAuthProviderByProviderAndId(env.DB, 'password', user.email || null);
-  if (authProvider && authProvider.user_id === user.id) {
-    await updateAuthProviderLastUsed(env.DB, authProvider.id, new Date().toISOString());
+  // Update last_used on the auth_provider entry for password (non-blocking if table doesn't exist)
+  try {
+    const authProvider = await getAuthProviderByProviderAndId(env.DB, 'password', user.email || null);
+    if (authProvider && authProvider.user_id === user.id) {
+      await updateAuthProviderLastUsed(env.DB, authProvider.id, new Date().toISOString());
+    }
+  } catch {
+    // auth_providers table may not exist yet - migrations not applied
   }
 
   doAudit(c, 'auth.password.ok', { ok: true, uid: user.id, name: user.name });
@@ -677,15 +689,19 @@ app.post('/api/register/password', async (c) => {
   await createUser(env.DB, user);
   if (invite) await updateInvite(env.DB, invite.code, { used_by: uid, used_at: now });
 
-  // Create auth_provider entry for password
-  await createAuthProvider(env.DB, {
-    user_id: uid,
-    provider: 'password',
-    provider_id: email || null,
-    email: email || null,
-    created: now,
-    last_used: now,
-  });
+  // Create auth_provider entry for password (non-blocking if table doesn't exist)
+  try {
+    await createAuthProvider(env.DB, {
+      user_id: uid,
+      provider: 'password',
+      provider_id: email || null,
+      email: email || null,
+      created: now,
+      last_used: now,
+    });
+  } catch {
+    // auth_providers table may not exist yet - migrations not applied
+  }
 
   const days = sessionDays(env);
   const secure = isSecure(env);
