@@ -113,3 +113,21 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at  INTEGER NOT NULL,
   revoked_at  INTEGER
 );
+
+-- ── auth_providers (linked authentication methods per user) ──────────────────
+-- Tracks which authentication methods (password, passkey, google) are linked to
+-- each user account. Enables signing in with any linked method, and supports
+-- account merging.
+CREATE TABLE IF NOT EXISTS auth_providers (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider     TEXT    NOT NULL,                  -- 'password', 'passkey', 'google'
+  provider_id  TEXT,                              -- credential ID (passkey), Google user ID, or email (password)
+  email        TEXT,                              -- email associated with this provider (nullable)
+  created      TEXT    NOT NULL,                  -- ISO-8601
+  last_used    TEXT                               -- ISO-8601 (nullable)
+);
+CREATE INDEX IF NOT EXISTS auth_providers_user_id ON auth_providers(user_id);
+-- Unique constraint: same credential can't be linked to multiple accounts
+CREATE UNIQUE INDEX IF NOT EXISTS auth_providers_provider_id
+  ON auth_providers(provider, provider_id) WHERE provider_id IS NOT NULL;

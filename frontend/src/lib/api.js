@@ -460,3 +460,21 @@ export async function googleFitEnable() {
 export async function googleFitDisconnect() {
   return api('/api/fitness/google/disconnect', { method: 'POST', body: '{}' })
 }
+
+// ── Account linking & merging ─────────────────────────────────────────────────
+
+export async function getLinkedProviders() {
+  return api('/api/account/providers')
+}
+
+export async function linkPassword(email, password, proof) {
+  return post('/api/account/link/password', { email, password, ...proof })
+}
+
+export async function unlinkProvider(providerId, proof) {
+  return api('/api/account/providers/' + providerId, { method: 'DELETE', body: JSON.stringify(proof) })
+}
+
+export async function mergeAccount(sourceProof) {
+  return post('/api/account/merge', { sourceProof })
+}
