@@ -345,7 +345,7 @@ export async function countAuthProvidersByUser(db, userId) {
 }
 
 // Transfer all data from one user to another (for account merge).
-// Transfers: passkeys, user_state, push_subscriptions, auth_providers.
+// Transfers: passkeys, user_state (merged), push_subscriptions, auth_providers, device_links.
 export async function transferUserData(db, fromUserId, toUserId) {
   // Transfer passkeys
   await db.prepare(
@@ -362,7 +362,152 @@ export async function transferUserData(db, fromUserId, toUserId) {
     'UPDATE auth_providers SET user_id = ? WHERE user_id = ?'
   ).bind(toUserId, fromUserId).run();
 
-  // For user_state, we need to merge or choose one. Here we keep target's state
-  // and discard source's since the target is the primary account.
-  // (The source user_state will be deleted when the source user is deleted due to CASCADE)
+  // Transfer device links
+  await db.prepare(
+    'UPDATE device_links SET user_id = ? WHERE user_id = ?'
+  ).bind(toUserId, fromUserId).run();
+
+  // Merge user_state: combine workouts, routines, bodyweight, etc. from both accounts
+  const fromState = await db.prepare('SELECT state, rev FROM user_state WHERE user_id = ?').bind(fromUserId).first();
+  const toState = await db.prepare('SELECT state, rev FROM user_state WHERE user_id = ?').bind(toUserId).first();
+
+  if (fromState?.state) {
+    const fromData = JSON.parse(fromState.state);
+    const toData = toState?.state ? JSON.parse(toState.state) : {};
+    const merged = mergeUserStates(toData, fromData);
+    const newRev = Math.max(toState?.rev || 0, fromState?.rev || 0) + 1;
+
+    await db.prepare(
+      `INSERT INTO user_state (user_id, state, rev) VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET state = excluded.state, rev = excluded.rev`
+    ).bind(toUserId, JSON.stringify(merged), newRev).run();
+  }
+}
+
+// Merge two user state objects: target (primary) settings win, but all data is combined.
+function mergeUserStates(target, source) {
+  const merged = { ...target };
+  const now = Date.now();
+
+  // Helper: merge arrays by id, preferring newer items on conflict
+  const mergeById = (a, b, idKey = 'id') => {
+    const map = new Map();
+    for (const item of [...(a || []), ...(b || [])]) {
+      if (!item || item[idKey] == null) continue;
+      const key = item[idKey];
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, item);
+      } else {
+        // Keep the one with higher _ts (timestamp), or the newer one
+        const existingTs = existing._ts || existing.t || 0;
+        const itemTs = item._ts || item.t || 0;
+        if (itemTs > existingTs) map.set(key, item);
+      }
+    }
+    return [...map.values()];
+  };
+
+  // Helper: merge arrays by date key
+  const mergeByDate = (a, b, dateKey = 'd') => {
+    const map = new Map();
+    for (const item of [...(a || []), ...(b || [])]) {
+      if (!item || !item[dateKey]) continue;
+      const key = item[dateKey];
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, item);
+      } else {
+        // Keep the one with higher timestamp
+        const existingTs = existing.t || existing._ts || 0;
+        const itemTs = item.t || item._ts || 0;
+        if (itemTs > existingTs) map.set(key, item);
+      }
+    }
+    return [...map.values()].sort((a, b) => (a[dateKey] || '').localeCompare(b[dateKey] || ''));
+  };
+
+  // Merge workouts (the main workout history)
+  if (source.workouts?.length) {
+    merged.workouts = mergeById(target.workouts, source.workouts);
+    // Sort by date descending (most recent first)
+    merged.workouts.sort((a, b) => {
+      const da = a.d || '', db = b.d || '';
+      if (da !== db) return db.localeCompare(da);
+      return (b.start || 0) - (a.start || 0);
+    });
+  }
+
+  // Merge routines (saved workout templates)
+  if (source.routines?.length) {
+    merged.routines = mergeById(target.routines, source.routines);
+  }
+
+  // Merge custom exercises
+  if (source.customEx?.length) {
+    merged.customEx = mergeById(target.customEx, source.customEx);
+  }
+
+  // Merge equipment profiles
+  if (source.equipProfiles?.length) {
+    merged.equipProfiles = mergeById(target.equipProfiles, source.equipProfiles);
+  }
+
+  // Merge gym cards
+  if (source.gymCards?.length) {
+    merged.gymCards = mergeById(target.gymCards, source.gymCards);
+  }
+
+  // Merge bodyweight entries (by date)
+  if (source.bodyweight?.length) {
+    merged.bodyweight = mergeByDate(target.bodyweight, source.bodyweight);
+  }
+
+  // Merge body measurements (by date)
+  if (source.measurements?.length) {
+    merged.measurements = mergeByDate(target.measurements, source.measurements);
+  }
+
+  // Merge day notes (object keyed by date)
+  if (source.dayNotes && typeof source.dayNotes === 'object') {
+    merged.dayNotes = { ...(target.dayNotes || {}), ...(source.dayNotes || {}) };
+    // For conflicts, keep the one with higher _ts
+    for (const [date, note] of Object.entries(source.dayNotes)) {
+      const existing = target.dayNotes?.[date];
+      if (existing && (existing._ts || 0) >= (note._ts || 0)) {
+        merged.dayNotes[date] = existing;
+      }
+    }
+  }
+
+  // Merge favourite exercises (union)
+  if (source.favEx?.length) {
+    merged.favEx = [...new Set([...(target.favEx || []), ...source.favEx])];
+  }
+
+  // Merge exercise weights (per-exercise last used weight)
+  if (source.exWeights && typeof source.exWeights === 'object') {
+    merged.exWeights = { ...(target.exWeights || {}) };
+    for (const [ex, data] of Object.entries(source.exWeights)) {
+      const existing = target.exWeights?.[ex];
+      if (!existing || (data.d || '') > (existing.d || '')) {
+        merged.exWeights[ex] = data;
+      }
+    }
+  }
+
+  // Merge exercise notes (per-exercise notes)
+  if (source.exNotes && typeof source.exNotes === 'object') {
+    merged.exNotes = { ...(source.exNotes || {}), ...(target.exNotes || {}) };
+  }
+
+  // Merge bar weights (per-exercise bar weight settings)
+  if (source.barWeights && typeof source.barWeights === 'object') {
+    merged.barWeights = { ...(source.barWeights || {}), ...(target.barWeights || {}) };
+  }
+
+  // Update timestamp
+  merged._ts = now;
+
+  return merged;
 }
