@@ -200,29 +200,37 @@ export default function Home() {
       try {
         const status = await googleFitStatus()
         if (status.connected && status.fit_enabled) {
-          // Get today's data
-          const today = new Date()
-          today.setHours(0, 0, 0, 0)
-          const startMs = today.getTime()
-          const endMs = Date.now()
-          const result = await googleFitSync({ start_ms: startMs, end_ms: endMs })
+          // Get last 7 days of data
+          const result = await googleFitSync()
           if (result.ok && result.data) {
-            // Sum up today's steps
             const todayStr = new Date().toISOString().slice(0, 10)
-            const todaySteps = (result.data.steps || [])
-              .filter(d => d.date === todayStr)
-              .reduce((sum, d) => sum + (d.value || 0), 0)
-            const todayCalories = (result.data.calories || [])
-              .filter(d => d.date === todayStr)
-              .reduce((sum, d) => sum + (d.value || 0), 0)
-            const todayDistance = (result.data.distance || [])
-              .filter(d => d.date === todayStr)
-              .reduce((sum, d) => sum + (d.value || 0), 0)
+            const yesterdayDate = new Date()
+            yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+            const yesterdayStr = yesterdayDate.toISOString().slice(0, 10)
+            
+            // Try today first, then fall back to yesterday
+            const stepsData = result.data.steps || []
+            const todaySteps = stepsData.find(d => d.date === todayStr)
+            const yesterdaySteps = stepsData.find(d => d.date === yesterdayStr)
+            const latestSteps = stepsData.length > 0 ? stepsData[stepsData.length - 1] : null
+            
+            const caloriesData = result.data.calories || []
+            const todayCalories = caloriesData.find(d => d.date === todayStr)
+            const yesterdayCalories = caloriesData.find(d => d.date === yesterdayStr)
+            const latestCalories = caloriesData.length > 0 ? caloriesData[caloriesData.length - 1] : null
+            
+            // Use today if available, otherwise yesterday, otherwise most recent
+            const useSteps = todaySteps || yesterdaySteps || latestSteps
+            const useCalories = todayCalories || yesterdayCalories || latestCalories
+            const isToday = useSteps?.date === todayStr
+            
             setGoogleFitData({
-              steps: Math.round(todaySteps),
-              calories: Math.round(todayCalories),
-              distanceM: Math.round(todayDistance),
+              steps: Math.round(useSteps?.value || 0),
+              calories: Math.round(useCalories?.value || 0),
+              distanceM: 0,
               source: 'google-fit',
+              date: useSteps?.date,
+              isToday,
             })
           }
         }
@@ -487,12 +495,12 @@ export default function Home() {
       {/* Daily steps — always shown; 0 when HC isn't connected yet */}
       <GoalTile
         icon="steps"
-        label={t('Steps today')}
+        label={googleFitData && !googleFitData.isToday && !vitals ? t('Steps') + ` (${googleFitData.date?.slice(5) || ''})` : t('Steps today')}
         value={((vitals?.steps || googleFitData?.steps) || 0).toLocaleString()}
         sub={vitals
           ? `${t('Goal')} ${(S.stepGoal || 10000).toLocaleString()}`
           : googleFitData
-          ? `${t('via Google Fit')} · ${t('Goal')} ${(S.stepGoal || 10000).toLocaleString()}`
+          ? `${t('via Google Fit')}${!googleFitData.isToday ? ' · ' + t('waiting for today') : ''}`
           : t('Needs Health Connect')}
         pct={(((vitals?.steps || googleFitData?.steps) || 0) / (S.stepGoal || 10000)) * 100}
         color={(vitals || googleFitData) ? 'var(--teal)' : 'var(--label-3)'}
@@ -544,13 +552,20 @@ export default function Home() {
     {/* ── Health Connect monitors ──────────────────────────────────────────── */}
     <HealthMonitorCard vitals={vitals} onNav={nav} />
     {/* Google Fit monitors (when HC not available but Google Fit is) */}
-    {!vitals && googleFitData && (
+    {!vitals && googleFitData && googleFitData.calories > 0 && (
       <div className="card" style={{ marginTop: 16 }}>
         <div className="row between" style={{ marginBottom: 12 }}>
           <h2 style={{ margin: 0, fontSize: 17 }}>{t('Health monitors')}</h2>
           <span className="dim small">{t('via Google Fit')}</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--orange)22', color: 'var(--orange)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+              <Icon name="flame" />
+            </div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{googleFitData.calories.toLocaleString()} kcal</div>
+            <div className="dim small">{t('Burned')}</div>
+          </div>
           {googleFitData.distanceM > 0 && (
             <div style={{ textAlign: 'center' }}>
               <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--teal)22', color: 'var(--teal)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
@@ -558,15 +573,6 @@ export default function Home() {
               </div>
               <div style={{ fontWeight: 600, fontSize: 15 }}>{(googleFitData.distanceM / 1000).toFixed(1)} km</div>
               <div className="dim small">{t('Distance')}</div>
-            </div>
-          )}
-          {googleFitData.calories > 0 && (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--orange)22', color: 'var(--orange)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <Icon name="flame" />
-              </div>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>{googleFitData.calories} kcal</div>
-              <div className="dim small">{t('Burned')}</div>
             </div>
           )}
         </div>

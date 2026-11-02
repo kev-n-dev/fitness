@@ -102,10 +102,10 @@ async function fitFetch(env, user, path, options = {}) {
 }
 
 // Aggregate data from Google Fit for a date range
-async function aggregateData(env, user, dataTypeName, startMs, endMs) {
+async function aggregateData(env, user, dataTypeName, startMs, endMs, bucketMs = 86400000) {
   const body = {
     aggregateBy: [{ dataTypeName }],
-    bucketByTime: { durationMillis: 86400000 }, // Daily buckets
+    bucketByTime: { durationMillis: bucketMs },
     startTimeMillis: startMs,
     endTimeMillis: endMs,
   };
@@ -157,24 +157,75 @@ app.post('/api/fitness/google/sync', async (c) => {
 
   const body = await c.req.json().catch(() => ({}));
 
-  // Default to last 7 days
+  // Default to last 7 days for historical data
   const now = Date.now();
-  const startMs = body.start_ms || now - 7 * 86400000;
+  const sevenDaysAgo = now - 7 * 86400000;
+  const startMs = body.start_ms || sevenDaysAgo;
   const endMs = body.end_ms || now;
 
-  log.debug(env, 'syncing Google Fit data', { userId: user.id, startMs, endMs });
+  // Calculate today's start (midnight local time approximation using UTC)
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const todayStartMs = todayStart.getTime();
+
+  log.debug(env, 'syncing Google Fit data', { userId: user.id, startMs, endMs, todayStartMs });
 
   try {
-    // Fetch steps data
+    // Fetch historical data (daily buckets for past days)
     const stepsData = await aggregateData(env, user, 'com.google.step_count.delta', startMs, endMs);
     if (stepsData.error) {
       return c.json({ error: 'Failed to fetch steps', details: stepsData }, stepsData.status || 500);
     }
 
-    // Fetch calories data
-    const caloriesData = await aggregateData(env, user, 'com.google.calories.expended', startMs, endMs);
+    // Fetch today's data with hourly buckets to get partial day data
+    let todaySteps = 0;
+    let todayCalories = 0;
+    let todayDistance = 0;
+    const todayDate = new Date().toISOString().slice(0, 10);
 
-    // Fetch distance data
+    if (todayStartMs < now) {
+      const todayStepsData = await aggregateData(env, user, 'com.google.step_count.delta', todayStartMs, now, 3600000); // 1-hour buckets
+      if (!todayStepsData.error && todayStepsData.bucket) {
+        for (const bucket of todayStepsData.bucket) {
+          if (bucket.dataset?.[0]?.point) {
+            for (const point of bucket.dataset[0].point) {
+              if (point.value?.[0]?.intVal !== undefined) {
+                todaySteps += point.value[0].intVal;
+              }
+            }
+          }
+        }
+      }
+
+      const todayCaloriesData = await aggregateData(env, user, 'com.google.calories.expended', todayStartMs, now, 3600000);
+      if (!todayCaloriesData.error && todayCaloriesData.bucket) {
+        for (const bucket of todayCaloriesData.bucket) {
+          if (bucket.dataset?.[0]?.point) {
+            for (const point of bucket.dataset[0].point) {
+              if (point.value?.[0]?.fpVal !== undefined) {
+                todayCalories += point.value[0].fpVal;
+              }
+            }
+          }
+        }
+      }
+
+      const todayDistanceData = await aggregateData(env, user, 'com.google.distance.delta', todayStartMs, now, 3600000);
+      if (!todayDistanceData.error && todayDistanceData.bucket) {
+        for (const bucket of todayDistanceData.bucket) {
+          if (bucket.dataset?.[0]?.point) {
+            for (const point of bucket.dataset[0].point) {
+              if (point.value?.[0]?.fpVal !== undefined) {
+                todayDistance += point.value[0].fpVal;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Fetch historical calories and distance (daily buckets)
+    const caloriesData = await aggregateData(env, user, 'com.google.calories.expended', startMs, endMs);
     const distanceData = await aggregateData(env, user, 'com.google.distance.delta', startMs, endMs);
 
     // Update last sync time
@@ -186,7 +237,29 @@ app.post('/api/fitness/google/sync', async (c) => {
     const calories = parseAggregateData(caloriesData, 'fpVal');
     const distance = parseAggregateData(distanceData, 'fpVal');
 
-    log.info(env, 'Google Fit sync completed', { userId: user.id, days: steps.length });
+    // Add or update today's entry with hourly data
+    const existingTodaySteps = steps.find(d => d.date === todayDate);
+    if (existingTodaySteps) {
+      existingTodaySteps.value = Math.max(existingTodaySteps.value, todaySteps);
+    } else if (todaySteps > 0) {
+      steps.push({ date: todayDate, value: todaySteps });
+    }
+
+    const existingTodayCalories = calories.find(d => d.date === todayDate);
+    if (existingTodayCalories) {
+      existingTodayCalories.value = Math.max(existingTodayCalories.value, Math.round(todayCalories * 100) / 100);
+    } else if (todayCalories > 0) {
+      calories.push({ date: todayDate, value: Math.round(todayCalories * 100) / 100 });
+    }
+
+    const existingTodayDistance = distance.find(d => d.date === todayDate);
+    if (existingTodayDistance) {
+      existingTodayDistance.value = Math.max(existingTodayDistance.value, Math.round(todayDistance * 100) / 100);
+    } else if (todayDistance > 0) {
+      distance.push({ date: todayDate, value: Math.round(todayDistance * 100) / 100 });
+    }
+
+    log.info(env, 'Google Fit sync completed', { userId: user.id, days: steps.length, todaySteps });
 
     return c.json({
       ok: true,
