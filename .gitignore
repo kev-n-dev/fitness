@@ -10,8 +10,10 @@ data/
 .env
 .env.local
 .env.*.local
-.env.local
-.env.*.local
+
+# Wrangler local dev secrets (contains API keys)
+.dev.vars
+worker/.dev.vars
 
 # Build output / deps
 frontend/dist/
