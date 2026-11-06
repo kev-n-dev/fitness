@@ -76,7 +76,7 @@ export function takeOutOfLoop(id, setSeq, seq, label) {
 const loopMark = S => JSON.stringify([S.rotation ?? null, S.queue ?? null, S.scheduleMode ?? null])
 export function undoTakeOut({ id, at, label, snap, mark, marks }) {
   if (!useStore.getState().S.routines.some(r => r.id === id)) {
-    useUI.getState().toast(t('Too late, that one's gone'))
+    useUI.getState().toast(t('Too late, that one\'s gone'))
     return false
   }
   useStore.getState().update(s => {
@@ -450,11 +450,19 @@ export default function Plan() {
       </Button>
     </div>
     
-    {/* Quick links */}
+    {/* Quick links - context-aware based on view */}
     <Section className="plan-links">
-      <Row icon="search" iconTint="var(--blue)" title={t('Exercise Library')} accessory="chevron" onClick={() => nav('/library')} />
-      <Row icon="chart" iconTint="var(--indigo)" title={t('Stats & Progress')} accessory="chevron" onClick={() => nav('/stats')} />
-      <Row icon="leaf" iconTint="var(--green)" title={t('Nutrition Tracking')} accessory="chevron" onClick={() => nav('/nutrition')} />
+      {view === 'routines' ? (
+        <>
+          <Row icon="search" iconTint="var(--blue)" title={t('Exercise Library')} accessory="chevron" onClick={() => nav('/library')} />
+          <Row icon="chart" iconTint="var(--indigo)" title={t('Stats & Progress')} accessory="chevron" onClick={() => nav('/stats')} />
+        </>
+      ) : (
+        <>
+          <Row icon="book" iconTint="var(--orange)" title={t('Recipes')} accessory="chevron" onClick={() => nav('/ranks/recipe')} />
+          <Row icon="leaf" iconTint="var(--green)" title={t('Macros & Nutrition')} accessory="chevron" onClick={() => nav('/nutrition')} />
+        </>
+      )}
     </Section>
     
     {/* Routine manager modal */}
