@@ -312,7 +312,7 @@ export default function Plan() {
   return <div className="narrow plan">
     <div className="hdr">
       <div>
-        <h1>{t('Plan')}</h1>
+        <h1>{t('Train')}</h1>
         <div className="sub">{view === 'routines' 
           ? (mode === 'rotation' ? t('Your routines in a loop') : t('Your weekly routine'))
           : t('Plan your meals')}</div>

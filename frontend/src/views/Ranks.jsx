@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
+import { t } from '../lib/i18n.js'
 import { repRankScore, repRankTier } from '../lib/ranks/repRank.js'
 import { runRankScore, runRankTier } from '../lib/ranks/runRank.js'
 import { recipeRankScore, recipeRankTier } from '../lib/ranks/recipeRank.js'
@@ -55,9 +56,12 @@ export default function Ranks() {
   return (
     <div className="narrow">
       <div className="hdr">
-        <div>
-          <h1>Compete</h1>
-          <div className="sub">Your ranks across all disciplines</div>
+        <button className="iconbtn" onClick={() => nav('/stats')} aria-label={t('Back')} style={{ marginRight: 8 }}>
+          <Icon name="chevronLeft" />
+        </button>
+        <div style={{ flex: 1 }}>
+          <h1>{t('Achievements')}</h1>
+          <div className="sub">{t('Your ranks across all disciplines')}</div>
         </div>
         <button className="iconbtn" onClick={() => nav('/leaderboard')} aria-label="Leaderboard">
           <Icon name="chart" />

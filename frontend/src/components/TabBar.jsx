@@ -34,7 +34,7 @@ export default function TabBar({ onStart }) {
   // Tab active states
   const onHome = cur === 'home' || cur === 'settings' || cur === 'checkin' || cur === 'nutrition' || cur === 'measurements' || cur === 'progress-photos'
   const onPlan = cur === 'plan' || cur === 'library' || cur === 'muscles'
-  const onCompete = cur === 'ranks' || cur === 'leaderboard' || cur === 'challenges' || cur === 'structural-balance'
+  const onCompete = cur === 'stats' || cur === 'history' || cur === 'ranks' || cur === 'leaderboard' || cur === 'challenges' || cur === 'structural-balance'
   const onSocial = cur === 'social' || cur === 'profile'
 
   const running = !!S.active && cur !== 'workout' && !S.active.editingWorkoutId && !S.active.backfill && S.active.start > 0
@@ -50,7 +50,7 @@ export default function TabBar({ onStart }) {
   return (
     <nav id="tabbar">
       <Tab active={onHome} icon="house" label={t('Home')} dot={trouble} onClick={() => nav('/home')} />
-      <Tab active={onPlan} icon="clipboard" label={t('Plan')} onClick={() => nav('/plan')} />
+      <Tab active={onPlan} icon="clipboard" label={t('Train')} onClick={() => nav('/plan')} />
       {/* Centre start / resume button */}
       <button className={'start' + (S.active ? ' rec' : '') + (S.active && cur === 'workout' ? ' on' : '')} onClick={startWorkout}
         aria-label={running ? t('Resume') : undefined}>
@@ -58,8 +58,8 @@ export default function TabBar({ onStart }) {
         {running ? <span className="tab-time"><Elapsed start={S.active.start} /></span>
           : <span>{S.active ? (cur === 'workout' ? t('Workout') : S.active.editingWorkoutId ? t('Edit workout') : t('Resume')) : t('Start')}</span>}
       </button>
-      <Tab active={onCompete} icon="trophy" label={t('Compete')} onClick={() => nav('/ranks')} />
-      <Tab active={onSocial} icon="chat" label={t('Social')} onClick={() => nav('/social')} />
+      <Tab active={onCompete} icon="chart" label={t('Progress')} onClick={() => nav('/stats')} />
+      <Tab active={onSocial} icon="person2" label={t('Community')} onClick={() => nav('/social')} />
     </nav>
   )
 }

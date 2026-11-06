@@ -633,13 +633,21 @@ export default function Stats() {
   if (showMax) exOpts.push({ value: 'max', label: t('Max reps') })
 
   return <>
-    <div className="hdr"><div><h1>{t('Stats')}</h1><div className="sub">{t('Progress & history')}</div></div>
-      <button className="iconbtn" onClick={() => nav('/history')} aria-label={t('History')}><Icon name="history" /></button></div>
+    <div className="hdr">
+      <div>
+        <h1>{t('Progress')}</h1>
+        <div className="sub">{t('Stats, history & achievements')}</div>
+      </div>
+      <div className="hdr-actions">
+        <button className="iconbtn" onClick={() => nav('/history')} aria-label={t('History')} title={t('History')}><Icon name="history" /></button>
+        <button className="iconbtn" onClick={() => nav('/ranks')} aria-label={t('Achievements')} title={t('Achievements')}><Icon name="trophy" /></button>
+      </div>
+    </div>
 
     <div className="tiles">
-      <div className="tile"><div className="l"><Icon name="dumbbell" />{t('Workouts')}</div><div className="v">{workouts.length}</div></div>
+      <div className="tile tappable" onClick={() => nav('/history')} style={{ cursor: 'pointer' }}><div className="l"><Icon name="history" />{t('History')}</div><div className="v">{workouts.length}</div></div>
+      <div className="tile tappable" onClick={() => nav('/ranks')} style={{ cursor: 'pointer' }}><div className="l"><Icon name="trophy" />{t('Achievements')}</div><div className="v">{streakWeeks(S)}w</div></div>
       <div className="tile"><div className="l"><Icon name="calendar" />{t('This month')}</div><div className="v">{monthW}</div></div>
-      <div className="tile"><div className="l"><Icon name="flame" />{t('Week streak')}</div><div className="v">{streakWeeks(S)}</div></div>
       <div className="tile"><div className="l"><Icon name="scale" />{t('Weight 30d')}</div><div className="v" style={{ fontSize: 22, color: bwDelta30 === null ? 'inherit' : bwDeltaColor(bwDelta30, (lastBW(S) || {}).w || 0) }}>{bwDelta30 === null ? '–' : (bwDelta30 > 0 ? '+' : '') + fmtNum(bwDelta30) + ' ' + S.unit}</div></div>
 
     </div>

@@ -191,9 +191,9 @@ export default function Social() {
     <div className="narrow">
       <div className="hdr">
         <div style={{ flex: 1 }}>
-          <h1>Team Feed</h1>
+          <h1>{t('Community')}</h1>
           <div className="sub">
-            {user ? `What's happening on this server` : 'Sign in to join'}
+            {user ? t('Activity from your server') : t('Sign in to join')}
           </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
