@@ -9,6 +9,87 @@ import { defaultBarWeight } from './bar.js'
 
 const LB_PER_KG = 2.2046226218
 
+/* ====== Per-exercise unit overrides ====== */
+// S.exUnits stores per-exercise unit overrides: { [exerciseId]: 'kg' | 'lb' }
+// When set, the exercise uses that unit for display and input, regardless of the global S.unit.
+
+/** Get the effective unit for an exercise: its override if set, otherwise the global unit. */
+export function unitFor(S, exId) {
+  return S?.exUnits?.[exId] || S?.unit || 'kg'
+}
+
+/** Set or clear a per-exercise unit override. Optionally converts existing values. */
+export function withExUnit(S, exId, newUnit, convert = false) {
+  const out = { ...S }
+  const currentUnit = unitFor(S, exId)
+  const globalUnit = S.unit || 'kg'
+  
+  out.exUnits = { ...(S.exUnits || {}) }
+  
+  // If newUnit matches global, remove the override
+  if (newUnit === globalUnit) {
+    delete out.exUnits[exId]
+    if (Object.keys(out.exUnits).length === 0) delete out.exUnits
+  } else {
+    out.exUnits[exId] = newUnit
+  }
+  
+  // Convert existing values if requested and unit is changing
+  if (convert && newUnit !== currentUnit) {
+    out.exWeights = { ...(S.exWeights || {}) }
+    const ew = out.exWeights[exId]
+    if (ew && typeof ew === 'object' && ew.w != null) {
+      out.exWeights[exId] = { ...ew, w: convertWeight(ew.w, currentUnit, newUnit) }
+    }
+    
+    // Convert bar weights for this exercise
+    if (S.barWeights?.[exId] > 0) {
+      out.barWeights = { ...(S.barWeights || {}) }
+      out.barWeights[exId] = convertWeight(S.barWeights[exId], currentUnit, newUnit)
+    }
+    
+    // Convert routine weights for this exercise
+    if (Array.isArray(S.routines)) {
+      out.routines = S.routines.map(r => ({
+        ...r,
+        ex: (r.ex || []).map(cfg => {
+          if (cfg.id !== exId) return cfg
+          const c = { ...cfg }
+          if (c.weight != null) c.weight = convertWeight(c.weight, currentUnit, newUnit)
+          if (c.inc > 0 && (c.mode == null || c.mode === 'reps')) c.inc = convertWeight(c.inc, currentUnit, newUnit)
+          if (Array.isArray(c.warmup)) c.warmup = c.warmup.map(w => (w && w.weight != null ? { ...w, weight: convertWeight(w.weight, currentUnit, newUnit) } : w))
+          if (Array.isArray(c.pyramidWeight)) c.pyramidWeight = c.pyramidWeight.map(w => (w > 0 ? convertWeight(w, currentUnit, newUnit) : w))
+          return c
+        }),
+      }))
+    }
+    
+    // Convert workout history for this exercise
+    if (Array.isArray(S.workouts)) {
+      out.workouts = S.workouts.map(w => ({
+        ...w,
+        entries: (w.entries || []).map(e => {
+          if (e.id !== exId) return e
+          return convEntry(e, currentUnit, newUnit)
+        }),
+      }))
+    }
+    
+    // Convert active session if present
+    if (S.active?.entries) {
+      out.active = {
+        ...S.active,
+        entries: S.active.entries.map(e => {
+          if (e.id !== exId) return e
+          return convEntry(e, currentUnit, newUnit)
+        }),
+      }
+    }
+  }
+  
+  return out
+}
+
 export function convertWeight(value, from, to) {
   if (from === to || value == null || value === '' || !Number.isFinite(Number(value))) return value
   const v = Number(value)

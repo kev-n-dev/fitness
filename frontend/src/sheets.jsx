@@ -43,6 +43,7 @@ import { isBackoff, backoffWeights } from './lib/backoff.js'
 import { isPyramid, normalizePyramid, normalizePyramidRest, normalizePyramidWeight, pyramidFromFlat, flatFromPyramid, pyramidLabel, PYRAMID_MAX, MAX_PYRAMID_SETS, PYRAMID_PRESETS } from './lib/pyramid.js'
 import { MOBILE, shareExport, shareExportBlob, printHtml } from './lib/mobile.js'
 import { speedUnitOf, toSpeed, fromSpeed } from './lib/speed.js'
+import { unitFor, withExUnit, convertWeight } from './lib/units.js'
 import { buildCompletedWorkout, sessionEnd } from './lib/finish-workout.js'
 import { refillAfter } from './lib/rotation.js'
 import { isWarmupRow, hasCompletedWork } from './lib/workout-model.js'
@@ -959,6 +960,69 @@ function DbLoadPicker({ ex, cfg, value, onChange }) {
   </>
 }
 
+// Per-exercise weight unit override (lib/units.js): lets you use kg for one exercise and lb for
+// another, with optional conversion of existing values.
+function ExerciseUnitPicker({ ex }) {
+  const st = useStore(s => s.S)
+  const globalUnit = st.unit || 'kg'
+  const exUnit = unitFor(st, ex.id)
+  const hasOverride = st.exUnits?.[ex.id] != null
+  const [showConvert, setShowConvert] = useState(false)
+  const [pendingUnit, setPendingUnit] = useState(null)
+  
+  const setUnit = (newUnit, convert) => {
+    update(s => {
+      const result = withExUnit(s, ex.id, newUnit, convert)
+      Object.assign(s, result)
+    })
+    setShowConvert(false)
+    setPendingUnit(null)
+    if (convert) {
+      toast(t('Converted weights to {0}', newUnit))
+    }
+  }
+  
+  const handleUnitChange = newUnit => {
+    const currentUnit = unitFor(st, ex.id)
+    // If unit is actually changing and there's existing data, ask about conversion
+    if (newUnit !== currentUnit) {
+      const hasData = st.exWeights?.[ex.id]?.w > 0 ||
+        st.workouts?.some(w => w.entries?.some(e => e.id === ex.id && e.sets?.some(s => s.w > 0))) ||
+        st.routines?.some(r => r.ex?.some(e => e.id === ex.id && e.weight > 0))
+      
+      if (hasData) {
+        setPendingUnit(newUnit)
+        setShowConvert(true)
+        return
+      }
+    }
+    setUnit(newUnit, false)
+  }
+  
+  return <>
+    <Segmented className="seg-inline" value={exUnit} onChange={handleUnitChange}
+      options={[{ value: 'kg', label: 'kg' }, { value: 'lb', label: 'lb' }]} />
+    <div className="small dim" style={{ margin: '8px 0 18px' }}>
+      {hasOverride
+        ? t('This exercise uses {0}, different from your default ({1}).', exUnit, globalUnit)
+        : t('Following your default unit ({0}).', globalUnit)}
+    </div>
+    {showConvert && pendingUnit && <div className="convert-prompt" style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 8, marginBottom: 18 }}>
+      <div className="small" style={{ marginBottom: 10 }}>
+        {t('You have existing weights for this exercise. Do you want to convert them from {0} to {1}?', unitFor(st, ex.id), pendingUnit)}
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <Button size="sm" variant="primary" onClick={() => setUnit(pendingUnit, true)}>{t('Convert')}</Button>
+        <Button size="sm" onClick={() => setUnit(pendingUnit, false)}>{t('Keep numbers')}</Button>
+        <Button size="sm" variant="ghost" onClick={() => { setShowConvert(false); setPendingUnit(null) }}>{t('Cancel')}</Button>
+      </div>
+      <div className="small dim" style={{ marginTop: 8 }}>
+        {t('Convert: 60 {0} → {1} {2}. Keep: 60 stays 60.', unitFor(st, ex.id), fmtNum(convertWeight(60, unitFor(st, ex.id), pendingUnit)), pendingUnit)}
+      </div>
+    </div>}
+  </>
+}
+
 // Mid-workout sheet behind the ⋯ menu's "Plate loading" — same values, same editor.
 function BarWeightSheet({ exId, cfg, close }) {
   const ex = exOr(exId)
@@ -1126,7 +1190,7 @@ function ExerciseDetail({ ex, close }) {
       {detailTags(ex).map(tg => <span key={tg.key} className={'tag' + (tg.acc ? ' acc' : '')}>{tg.icon && <Icon name={tg.icon} />}{tg.label}</span>)}
     </div>
     {descFor(ex) && <div className="exnote">{descFor(ex)}</div>}
-    {best > 0 && <div className="small row" style={{ marginBottom: 6, gap: 5 }}><Icon name="trophy" style={{ fontSize: 14, color: 'var(--yellow)' }} />{t('Best:')} <b className="accent" style={{ whiteSpace: 'nowrap' }}>{fmtNum(best)} {st.unit}</b>{last ? ` · ${t('last')} ${fmtDate(last.d)}: ${last.sets.map(s => setLabel(ex.id, s, last.target, speedUnitOf(st))).join(', ')}` : ''}</div>}
+    {best > 0 && <div className="small row" style={{ marginBottom: 6, gap: 5 }}><Icon name="trophy" style={{ fontSize: 14, color: 'var(--yellow)' }} />{t('Best:')} <b className="accent" style={{ whiteSpace: 'nowrap' }}>{fmtNum(best)} {unitFor(st, ex.id)}</b>{last ? ` · ${t('last')} ${fmtDate(last.d)}: ${last.sets.map(s => setLabel(ex.id, s, last.target, speedUnitOf(st))).join(', ')}` : ''}</div>}
     <Button variant="primary" icon="plus" style={{ margin: '10px 0 4px' }} onClick={() => addToRoutineSheet(ex)}>{t('Add to my plan')}</Button>
     {last && <Button icon="history" style={{ marginTop: 4 }} onClick={() => exerciseHistorySheet(ex.id)}>{t('History')}</Button>}
     {isCustomEx(ex) && <div className="row" style={{ gap: 8, marginTop: 8 }}>
@@ -1143,6 +1207,12 @@ function ExerciseDetail({ ex, close }) {
       <h4 className="sec">{t('Weight means')}</h4>
       <DbLoadPicker ex={ex} value={dbLoadFor(st, ex.id)}
         onChange={v => update(s => { s.dbLoad = withDbLoad(s.dbLoad, ex.id, v) })} />
+    </>}
+    {/* Per-exercise unit override: use kg for some exercises and lb for others. Only shown for
+        weighted exercises (not cardio). */}
+    {modeOf({ id: ex.id }) === 'reps' && <>
+      <h4 className="sec">{t('Weight unit')}</h4>
+      <ExerciseUnitPicker ex={ex} />
     </>}
     {/* No one-rep max on an assistance machine: the load is the help you were given, so the
         calculator would answer "your 1RM is 23 kg" about a number that gets smaller as you get
@@ -2132,6 +2202,11 @@ function ExConfig({ ex, existing, onSave, onDelete, onReplace, close, routine, i
     {mode === 'reps' && <>
       <h4 className="sec">{t('Plate loading')}</h4>
       <BarWeightEditor ex={ex} cfg={c} extra={t('Applies to this exercise everywhere, not just this plan.')} />
+    </>}
+    {/* Per-exercise unit override: use kg for some exercises and lb for others. */}
+    {mode === 'reps' && <>
+      <h4 className="sec">{t('Weight unit')}</h4>
+      <ExerciseUnitPicker ex={ex} />
     </>}
     {pyramid
       ? <div className="small dim" style={{ marginBottom: 18 }}>{t('Weight is up to you: pyramid sets are not progressed automatically.')}</div>
