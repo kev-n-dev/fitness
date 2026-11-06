@@ -274,7 +274,26 @@ export default function Plan() {
       const dow = new Date(day).getDay()
       dayAssignSheet(dow)
     } else {
-      // For meals, just select the day (detail view shows below)
+      // For meals, open add meal menu if there are recipes, otherwise go to recipes
+      if (!recipes.length) {
+        nav('/ranks/recipe')
+        return
+      }
+      menuSheet({
+        title: t('Add meal for {0}', fmtDate(day, true)),
+        items: recipes.map(r => ({
+          icon: 'leaf',
+          label: r.name,
+          sub: r.nutrition?.calories ? `${r.nutrition.calories} kcal` : undefined,
+          onClick: () => {
+            update(s => {
+              if (!s.plannedMeals) s.plannedMeals = {}
+              if (!s.plannedMeals[day]) s.plannedMeals[day] = []
+              s.plannedMeals[day].push({ recipeId: r.id, servings: 1 })
+            })
+          }
+        }))
+      })
     }
   }
 
