@@ -30,9 +30,13 @@ import {
 // Plan has two views (v1.3.11): Schedule (how you train, and when) and Routines (what you
 // train). The last one you looked at comes back: a per-device convenience, never synced, so it
 // lives in this browser's storage and not in S.
+// v1.4.x adds Meals for meal planning alongside workout planning.
 export const PLAN_VIEW_KEY = 'gym_plan_view'
 const readView = () => {
-  try { return localStorage.getItem(PLAN_VIEW_KEY) === 'routines' ? 'routines' : 'schedule' } catch { return 'schedule' }
+  try { 
+    const v = localStorage.getItem(PLAN_VIEW_KEY)
+    return ['schedule', 'routines', 'meals'].includes(v) ? v : 'schedule'
+  } catch { return 'schedule' }
 }
 
 /* Undo for Plan's two removals (v1.3.11). Both go through the store's normal update, so sync
@@ -170,7 +174,7 @@ export default function Plan() {
     </div>
     <input ref={fileRef} type="file" accept="application/json,.json" onChange={pickFile} hidden />
     <Segmented className="plan-views" value={view} onChange={setView}
-      options={[{ value: 'schedule', label: t('Schedule') }, { value: 'routines', label: t('Routines') }]} />
+      options={[{ value: 'schedule', label: t('Schedule') }, { value: 'routines', label: t('Routines') }, { value: 'meals', label: t('Meals') }]} />
     {/* Quick access to Library and Stats from Plan */}
     <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
       <Button size="sm" variant="ghost" icon="search" onClick={() => nav('/library')} style={{ flex: 1 }}>{t('Library')}</Button>
@@ -178,6 +182,8 @@ export default function Plan() {
     </div>
     {view === 'routines'
       ? <Routines S={S} update={update} nav={nav} />
+      : view === 'meals'
+      ? <MealPlanView S={S} update={update} nav={nav} />
       : <Schedule S={S} update={update} nav={nav} mode={mode} />}
   </div>
 }
@@ -460,5 +466,265 @@ function Routines({ S, update, nav }) {
       <div className="empty"><div className="ico"><Icon name="clipboard" /></div>{t('No routines yet.')}<br />{t('Make one, or grab the starter plan to get going.')}</div>
       <Button icon="clipboard" onClick={starterPlanSheet}>{t('Load starter plan')}</Button>
     </>}
+  </>
+}
+
+/* ================================ Meal Planning ================================ */
+
+import { DEFAULT_GOALS } from './Nutrition.jsx'
+
+// Day keys for the current week
+const weekDays = (ws) => {
+  const today = new Date()
+  const days = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today)
+    d.setDate(today.getDate() - today.getDay() + (ws === 0 ? i : i + 1)) // Adjust for week start
+    days.push(d.toISOString().slice(0, 10))
+  }
+  return days
+}
+
+function MealPlanView({ S, update, nav }) {
+  const [selectedDay, setSelectedDay] = useState(todayISO())
+  const recipes = S.recipes || []
+  const plannedMeals = S.plannedMeals || {} // { '2026-11-05': [{ recipeId, servings }], ... }
+  const goals = { ...DEFAULT_GOALS, ...(S.nutritionGoals || {}) }
+  
+  const ws = weekStartOf(S)
+  const days = weekDays(ws)
+  const todayDow = new Date().getDay()
+
+  // Get planned meals for a specific day
+  const mealsForDay = (day) => (plannedMeals[day] || []).map(pm => ({
+    ...pm,
+    recipe: recipes.find(r => r.id === pm.recipeId)
+  })).filter(pm => pm.recipe)
+
+  // Calculate macros for a day's planned meals
+  const dayMacros = (day) => {
+    const meals = mealsForDay(day)
+    return meals.reduce((acc, pm) => {
+      const n = pm.recipe.nutrition || {}
+      const servings = pm.servings || 1
+      return {
+        calories: acc.calories + ((n.calories || 0) * servings),
+        protein: acc.protein + ((n.protein || 0) * servings),
+        carbs: acc.carbs + ((n.carbs || 0) * servings),
+        fat: acc.fat + ((n.fat || 0) * servings),
+      }
+    }, { calories: 0, protein: 0, carbs: 0, fat: 0 })
+  }
+
+  // Add a recipe to a day's meal plan
+  const addToDay = (day, recipeId) => {
+    update(s => {
+      if (!s.plannedMeals) s.plannedMeals = {}
+      if (!s.plannedMeals[day]) s.plannedMeals[day] = []
+      s.plannedMeals[day].push({ recipeId, servings: 1 })
+    })
+  }
+
+  // Remove a meal from a day's plan
+  const removeFromDay = (day, index) => {
+    update(s => {
+      if (s.plannedMeals?.[day]) {
+        s.plannedMeals[day].splice(index, 1)
+        if (s.plannedMeals[day].length === 0) delete s.plannedMeals[day]
+      }
+    })
+  }
+
+  // Update servings
+  const updateServings = (day, index, servings) => {
+    update(s => {
+      if (s.plannedMeals?.[day]?.[index]) {
+        s.plannedMeals[day][index].servings = Math.max(0.5, servings)
+      }
+    })
+  }
+
+  // Log a planned meal to the actual meal log
+  const logMeal = (day, meal) => {
+    const recipe = meal.recipe
+    if (!recipe) return
+    const servings = meal.servings || 1
+    const n = recipe.nutrition || {}
+    update(s => {
+      if (!s.meals) s.meals = []
+      s.meals.push({
+        id: uid(),
+        name: recipe.name + (servings !== 1 ? ` (×${servings})` : ''),
+        time: new Date().toISOString(),
+        nutrition: {
+          calories: Math.round((n.calories || 0) * servings),
+          protein: Math.round((n.protein || 0) * servings),
+          carbs: Math.round((n.carbs || 0) * servings),
+          fat: Math.round((n.fat || 0) * servings),
+          fiber: Math.round((n.fiber || 0) * servings),
+          sugar: Math.round((n.sugar || 0) * servings),
+          saturatedFat: Math.round((n.saturatedFat || 0) * servings),
+          sodium: Math.round((n.sodium || 0) * servings),
+          water: Math.round((n.water || 0) * servings),
+        },
+        recipeId: recipe.id,
+      })
+    })
+    useUI.getState().toast(t('Logged {0}', recipe.name))
+  }
+
+  // Mini macro indicator
+  const MacroIndicator = ({ value, goal, color }) => {
+    const pct = goal > 0 ? Math.min(100, (value / goal) * 100) : 0
+    return (
+      <div style={{ width: 40, height: 4, borderRadius: 2, background: 'var(--surface-3)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 2 }} />
+      </div>
+    )
+  }
+
+  const selectedMeals = mealsForDay(selectedDay)
+  const selectedMacros = dayMacros(selectedDay)
+  const isToday = selectedDay === todayISO()
+
+  return <>
+    {/* Week overview */}
+    <h4 className="sec">{t('This week')}</h4>
+    <div className="list plan-week">
+      {days.map((day, i) => {
+        const macros = dayMacros(day)
+        const mealCount = mealsForDay(day).length
+        const dow = new Date(day).getDay()
+        const isSelected = day === selectedDay
+        const isTodayDay = day === todayISO()
+        
+        return (
+          <div key={day} 
+            className={'item plan-day' + (isSelected ? ' selected' : '')} 
+            style={{ background: isSelected ? 'var(--acc)11' : undefined, cursor: 'pointer' }}
+            onClick={() => setSelectedDay(day)}>
+            <span className={'plan-day-n' + (isTodayDay ? ' today' : '')}>{t(DAYS[dow])}</span>
+            <span className={'lrow-i' + (mealCount ? '' : ' rest')} style={{ background: mealCount ? 'var(--green)26' : undefined }}>
+              <Icon name={mealCount ? 'leaf' : 'moon'} style={{ color: mealCount ? 'var(--green)' : undefined }} />
+            </span>
+            <div className="grow">
+              <div className="tt">{mealCount ? t('{0} meals planned', mealCount) : t('No meals')}</div>
+              <div className="ss">
+                {macros.calories > 0 
+                  ? `${Math.round(macros.calories)} kcal · ${Math.round(macros.protein)}g P`
+                  : t('Tap to plan')}
+              </div>
+            </div>
+            {isSelected && <Icon name="check" style={{ color: 'var(--acc)' }} />}
+          </div>
+        )
+      })}
+    </div>
+
+    {/* Selected day detail */}
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="row between" style={{ marginBottom: 12 }}>
+        <div>
+          <h3 style={{ margin: 0 }}>{fmtDate(selectedDay, true)}</h3>
+          {isToday && <span className="tag acc" style={{ marginTop: 4 }}>{t('Today')}</span>}
+        </div>
+        <Button size="sm" variant="tinted" icon="plus" onClick={() => {
+          if (!recipes.length) {
+            nav('/ranks/recipe')
+            return
+          }
+          menuSheet({
+            title: t('Add meal'),
+            items: recipes.map(r => ({
+              icon: 'leaf',
+              label: r.name,
+              sub: r.nutrition?.calories ? `${r.nutrition.calories} kcal` : undefined,
+              onClick: () => addToDay(selectedDay, r.id)
+            }))
+          })
+        }}>{t('Add')}</Button>
+      </div>
+
+      {/* Macro goals for the day */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16, padding: '12px', background: 'var(--surface-2)', borderRadius: 8 }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: selectedMacros.calories > goals.calories ? 'var(--red)' : 'var(--green)' }}>
+            {Math.round(selectedMacros.calories)}
+          </div>
+          <div className="dim small">/ {goals.calories}</div>
+          <div className="dim small">{t('kcal')}</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--blue)' }}>{Math.round(selectedMacros.protein)}g</div>
+          <div className="dim small">/ {goals.protein}g</div>
+          <div className="dim small">{t('Protein')}</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--orange)' }}>{Math.round(selectedMacros.carbs)}g</div>
+          <div className="dim small">/ {goals.carbs}g</div>
+          <div className="dim small">{t('Carbs')}</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--yellow)' }}>{Math.round(selectedMacros.fat)}g</div>
+          <div className="dim small">/ {goals.fat}g</div>
+          <div className="dim small">{t('Fat')}</div>
+        </div>
+      </div>
+
+      {/* Planned meals list */}
+      {selectedMeals.length === 0 ? (
+        <div className="empty" style={{ padding: '20px 0' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🥗</div>
+          <div className="muted small">{t('No meals planned for this day.')}</div>
+          <div style={{ marginTop: 12 }}>
+            <Button size="sm" variant="tinted" onClick={() => nav('/ranks/recipe')}>{t('Create recipe')}</Button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          {selectedMeals.map((pm, i) => (
+            <div key={i} style={{ padding: '10px 0', borderBottom: '0.5px solid var(--sep)' }}>
+              <div className="row between">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 500 }}>{pm.recipe.name}</div>
+                  <div className="muted small">
+                    {pm.recipe.nutrition?.calories && `${Math.round(pm.recipe.nutrition.calories * pm.servings)} kcal`}
+                    {pm.recipe.nutrition?.protein && ` · ${Math.round(pm.recipe.nutrition.protein * pm.servings)}g P`}
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 8 }}>
+                  {/* Servings control */}
+                  <div className="row" style={{ gap: 4 }}>
+                    <button className="iconbtn" style={{ width: 28, height: 28 }} 
+                      onClick={() => updateServings(selectedDay, i, pm.servings - 0.5)}>
+                      <Icon name="minus" style={{ fontSize: 12 }} />
+                    </button>
+                    <span style={{ minWidth: 30, textAlign: 'center', fontWeight: 500 }}>{pm.servings}×</span>
+                    <button className="iconbtn" style={{ width: 28, height: 28 }}
+                      onClick={() => updateServings(selectedDay, i, pm.servings + 0.5)}>
+                      <Icon name="plus" style={{ fontSize: 12 }} />
+                    </button>
+                  </div>
+                  {isToday && (
+                    <Button size="sm" variant="tinted" onClick={() => logMeal(selectedDay, pm)}>{t('Log')}</Button>
+                  )}
+                  <button className="iconbtn" onClick={() => removeFromDay(selectedDay, i)} aria-label={t('Remove')}>
+                    <Icon name="trash" style={{ fontSize: 14 }} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
+    {/* Quick links */}
+    <Section className="plan-link" style={{ marginTop: 16 }}>
+      <Row icon="leaf" iconTint="var(--green)" title={t('Nutrition tracking')} subtitle={t('Log meals and track macros')}
+        accessory="chevron" onClick={() => nav('/nutrition')} />
+      <Row icon="book" iconTint="var(--orange)" title={t('Recipe library')} subtitle={t('Create and manage recipes')}
+        accessory="chevron" onClick={() => nav('/ranks/recipe')} />
+    </Section>
   </>
 }

@@ -245,7 +245,7 @@ export default function Measurements() {
 
   return <div className="narrow">
     <div className="hdr">
-      <button className="iconbtn" onClick={() => nav('/stats')} aria-label={t('Stats')}><Icon name="chevronLeft" /></button>
+      <button className="iconbtn" onClick={() => nav(-1)} aria-label={t('Back')}><Icon name="chevronLeft" /></button>
       <div style={{ flex: 1, marginLeft: 10 }}>
         <h1>{t('Body measurements')}</h1>
         <div className="sub">{t('Track your physique')}</div>

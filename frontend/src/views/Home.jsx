@@ -581,5 +581,42 @@ export default function Home() {
     {MOBILE && hcStatus && !hcStatus.on && !vitals && (
       <ConnectHealthCard onConnect={connectHealthRead} />
     )}
+
+    {/* ── Quick access to tracking pages ────────────────────────────────────── */}
+    <h2 style={{ margin: '18px 2px 10px', fontSize: 20, fontWeight: 700, letterSpacing: '-.021em' }}>{t('Tracking')}</h2>
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="lrow tappable" {...tappable(() => nav('/nutrition'))} style={{ borderBottom: 'var(--hair) solid var(--sep)' }}>
+        <span className="lrow-i" style={{ background: 'var(--green)26', color: 'var(--green)' }}><Icon name="leaf" /></span>
+        <div className="lrow-c">
+          <div className="lrow-t">{t('Nutrition')}</div>
+          <div className="lrow-s">{t('Track meals, calories, macros & water')}</div>
+        </div>
+        <Icon name="chevronRight" className="chev" />
+      </div>
+      <div className="lrow tappable" {...tappable(() => nav('/ranks/recipe'))} style={{ borderBottom: 'var(--hair) solid var(--sep)' }}>
+        <span className="lrow-i" style={{ background: 'var(--orange)26', color: 'var(--orange)' }}><Icon name="book" /></span>
+        <div className="lrow-c">
+          <div className="lrow-t">{t('Recipes')}</div>
+          <div className="lrow-s">{t('Create recipes & plan meals')}</div>
+        </div>
+        <Icon name="chevronRight" className="chev" />
+      </div>
+      <div className="lrow tappable" {...tappable(() => nav('/measurements'))} style={{ borderBottom: 'var(--hair) solid var(--sep)' }}>
+        <span className="lrow-i" style={{ background: 'var(--purple)26', color: 'var(--purple)' }}><Icon name="ruler" /></span>
+        <div className="lrow-c">
+          <div className="lrow-t">{t('Body measurements')}</div>
+          <div className="lrow-s">{t('Waist, arms, body fat & more')}</div>
+        </div>
+        <Icon name="chevronRight" className="chev" />
+      </div>
+      <div className="lrow tappable" {...tappable(() => nav('/progress-photos'))}>
+        <span className="lrow-i" style={{ background: 'var(--blue)26', color: 'var(--blue)' }}><Icon name="camera" /></span>
+        <div className="lrow-c">
+          <div className="lrow-t">{t('Progress photos')}</div>
+          <div className="lrow-s">{t('Before/after slider & photo timeline')}</div>
+        </div>
+        <Icon name="chevronRight" className="chev" />
+      </div>
+    </div>
   </div>
 }

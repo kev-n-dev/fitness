@@ -170,7 +170,7 @@ export default function ProgressPhotos() {
   }
 
   return <>
-    <div className="hdr"><button className="iconbtn" onClick={() => nav('/stats')} aria-label={t('Stats')}><Icon name="chevronLeft" /></button>
+    <div className="hdr"><button className="iconbtn" onClick={() => nav(-1)} aria-label={t('Back')}><Icon name="chevronLeft" /></button>
       <div style={{ flex: 1, marginInlineStart: 12 }}><h1>{t('Progress photos')}</h1>
         <div className="sub">{tn('{0} photo', '{0} photos', photos.length)}</div></div>
       {photos.length >= 2 && (comparing

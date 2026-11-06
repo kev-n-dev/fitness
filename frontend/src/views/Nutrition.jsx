@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import Icon from '../components/Icon.jsx'
@@ -6,6 +6,7 @@ import { Button, Segmented } from '../components/ui.jsx'
 import FoodScanner from '../components/FoodScanner.jsx'
 import { getCachedVitals, healthReadStatus, enableHealthRead, getCachedHCNutrition } from '../lib/health-read.js'
 import { MOBILE } from '../lib/mobile.js'
+import { t } from '../lib/i18n.js'
 
 // ── Default goals ─────────────────────────────────────────────────────────────
 // Based on general dietary reference values. Users set their own in Settings.
@@ -345,9 +346,14 @@ export default function Nutrition() {
   return (
     <div className="narrow">
       <div className="hdr">
-        <div>
-          <h1>Nutrition</h1>
-          <div className="sub">{today}</div>
+        <div className="row" style={{ gap: 12 }}>
+          <button className="iconbtn" onClick={() => nav(-1)} aria-label="Back">
+            <Icon name="chevronLeft" />
+          </button>
+          <div>
+            <h1>Nutrition</h1>
+            <div className="sub">{today}</div>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="iconbtn" onClick={() => setEditingGoals(true)} aria-label="Edit goals">
@@ -474,18 +480,382 @@ export default function Nutrition() {
       )}
 
       {tab === 'planner' && !adding && !editingGoals && (
-        <div className="card">
-          <div style={{ textAlign: 'center', padding: '24px 0' }}>
-            <div style={{ fontSize: 36 }}>📅</div>
-            <div className="muted small" style={{ marginTop: 8 }}>
-              Meal planner lets you schedule meals from your recipe library.
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <Button variant="primary" onClick={() => nav('/ranks/recipe')}>Browse recipes</Button>
-            </div>
-          </div>
-        </div>
+        <MealPlanner
+          S={S}
+          goals={goals}
+          todayMeals={meals}
+          onAddToLog={addMeal}
+          onNav={nav}
+        />
       )}
     </div>
+  )
+}
+
+// ── Meal Planner Component ────────────────────────────────────────────────────
+
+function MealPlanner({ S, goals, todayMeals, onAddToLog, onNav }) {
+  const updateS = useStore(s => s.update)
+  const [plannerTab, setPlannerTab] = useState('plan')
+  const [selectedRecipes, setSelectedRecipes] = useState([]) // IDs of recipes planned for today
+  
+  // Get all recipes: user's own + saved/bookmarked
+  const recipes = S.recipes || []
+  const savedRecipeIds = S.savedRecipes || []
+  
+  // For now, saved recipes would need a server lookup - show user's own recipes
+  const myRecipes = recipes.filter(r => !r.published || r.createdBy === 'me')
+  const publishedRecipes = recipes.filter(r => r.published)
+
+  // Calculate totals from logged meals
+  const loggedTotals = todayMeals.reduce((acc, m) => {
+    const n = m.nutrition || {}
+    for (const key of Object.keys(acc)) {
+      if (n[key] != null) acc[key] += n[key]
+    }
+    return acc
+  }, { ...ZERO_TOTALS })
+
+  // Calculate totals from planned recipes
+  const plannedTotals = useMemo(() => {
+    return selectedRecipes.reduce((acc, recipeId) => {
+      const recipe = recipes.find(r => r.id === recipeId)
+      if (!recipe?.nutrition) return acc
+      const n = recipe.nutrition
+      for (const key of Object.keys(acc)) {
+        if (n[key] != null) acc[key] += n[key]
+      }
+      return acc
+    }, { ...ZERO_TOTALS })
+  }, [selectedRecipes, recipes])
+
+  // Combined projection: logged + planned
+  const projectedTotals = useMemo(() => {
+    const combined = { ...loggedTotals }
+    for (const key of Object.keys(combined)) {
+      combined[key] += plannedTotals[key] || 0
+    }
+    return combined
+  }, [loggedTotals, plannedTotals])
+
+  const toggleRecipe = (recipeId) => {
+    setSelectedRecipes(prev => 
+      prev.includes(recipeId) 
+        ? prev.filter(id => id !== recipeId)
+        : [...prev, recipeId]
+    )
+  }
+
+  const logPlannedMeal = (recipe) => {
+    onAddToLog({
+      id: crypto.randomUUID(),
+      name: recipe.name,
+      time: new Date().toISOString(),
+      nutrition: { ...recipe.nutrition },
+      recipeId: recipe.id,
+    })
+    // Remove from plan after logging
+    setSelectedRecipes(prev => prev.filter(id => id !== recipe.id))
+  }
+
+  const logAllPlanned = () => {
+    selectedRecipes.forEach(recipeId => {
+      const recipe = recipes.find(r => r.id === recipeId)
+      if (recipe) {
+        onAddToLog({
+          id: crypto.randomUUID(),
+          name: recipe.name,
+          time: new Date().toISOString(),
+          nutrition: { ...recipe.nutrition },
+          recipeId: recipe.id,
+        })
+      }
+    })
+    setSelectedRecipes([])
+  }
+
+  // Macro comparison helper
+  const MacroCompare = ({ label, logged, planned, goal, unit, color }) => {
+    const total = logged + planned
+    const pct = goal > 0 ? Math.min(100, (total / goal) * 100) : 0
+    const loggedPct = goal > 0 ? Math.min(100, (logged / goal) * 100) : 0
+    const isLimit = label === 'Sugar' || label === 'Sat. fat' || label === 'Sodium'
+    const overLimit = isLimit && total > goal
+    
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div className="row between" style={{ marginBottom: 4 }}>
+          <span className="small" style={{ fontWeight: 500 }}>{label}</span>
+          <span className="small">
+            <span style={{ color: 'var(--label-2)' }}>{Math.round(logged)}</span>
+            {planned > 0 && <span style={{ color: 'var(--green)' }}> +{Math.round(planned)}</span>}
+            <span className="dim"> / {goal}{unit}</span>
+          </span>
+        </div>
+        <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden', position: 'relative' }}>
+          {/* Logged portion */}
+          <div style={{ 
+            position: 'absolute', height: '100%', width: `${loggedPct}%`, 
+            background: overLimit ? 'var(--red)' : color, borderRadius: 3, 
+            transition: 'width 0.3s var(--ease)' 
+          }} />
+          {/* Planned portion (lighter/striped) */}
+          {planned > 0 && (
+            <div style={{ 
+              position: 'absolute', height: '100%', 
+              left: `${loggedPct}%`, width: `${Math.min(100 - loggedPct, (planned / goal) * 100)}%`,
+              background: `repeating-linear-gradient(45deg, ${color}66, ${color}66 2px, ${color}33 2px, ${color}33 4px)`,
+              borderRadius: '0 3px 3px 0',
+              transition: 'all 0.3s var(--ease)'
+            }} />
+          )}
+        </div>
+        {overLimit && (
+          <div className="small" style={{ color: 'var(--red)', marginTop: 2 }}>
+            {t('Over limit by {0}{1}', Math.round(total - goal), unit)}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Sub-tabs for planner */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {[
+          { id: 'plan', label: t('Plan meals'), icon: 'calendar' },
+          { id: 'recipes', label: t('My recipes'), icon: 'book' },
+        ].map(item => (
+          <button key={item.id} onClick={() => setPlannerTab(item.id)}
+            className={plannerTab === item.id ? 'tag acc' : 'tag'}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', border: 'none' }}>
+            <Icon name={item.icon} style={{ fontSize: 14 }} />
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {plannerTab === 'plan' && (
+        <>
+          {/* Macro projection card */}
+          <div className="card">
+            <div className="row between" style={{ marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>{t('Daily projection')}</h3>
+              {selectedRecipes.length > 0 && (
+                <span className="tag" style={{ background: 'var(--green)22', color: 'var(--green)' }}>
+                  +{selectedRecipes.length} {t('planned')}
+                </span>
+              )}
+            </div>
+            
+            {/* Calories projection */}
+            <div style={{ marginBottom: 16 }}>
+              <div className="row between" style={{ marginBottom: 6 }}>
+                <div>
+                  <div className="muted small">{t('Calories')}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1 }}>
+                    <span>{Math.round(loggedTotals.calories)}</span>
+                    {plannedTotals.calories > 0 && (
+                      <span style={{ color: 'var(--green)' }}> +{Math.round(plannedTotals.calories)}</span>
+                    )}
+                    <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}> / {goals.calories}</span>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="dim small">{t('remaining')}</div>
+                  <div style={{ fontWeight: 700, color: projectedTotals.calories > goals.calories ? 'var(--red)' : 'var(--green)' }}>
+                    {Math.max(0, goals.calories - projectedTotals.calories)}
+                  </div>
+                </div>
+              </div>
+              <div style={{ height: 8, borderRadius: 4, background: 'var(--surface-2)', overflow: 'hidden', position: 'relative' }}>
+                <div style={{ 
+                  position: 'absolute', height: '100%', 
+                  width: `${Math.min(100, (loggedTotals.calories / goals.calories) * 100)}%`,
+                  background: projectedTotals.calories > goals.calories ? 'var(--red)' : 'var(--green)',
+                  borderRadius: 4, transition: 'width 0.3s var(--ease)'
+                }} />
+                {plannedTotals.calories > 0 && (
+                  <div style={{ 
+                    position: 'absolute', height: '100%',
+                    left: `${Math.min(100, (loggedTotals.calories / goals.calories) * 100)}%`,
+                    width: `${Math.min(100 - (loggedTotals.calories / goals.calories) * 100, (plannedTotals.calories / goals.calories) * 100)}%`,
+                    background: `repeating-linear-gradient(45deg, var(--green)66, var(--green)66 3px, var(--green)33 3px, var(--green)33 6px)`,
+                    borderRadius: '0 4px 4px 0', transition: 'all 0.3s var(--ease)'
+                  }} />
+                )}
+              </div>
+            </div>
+
+            {/* Key macro projections */}
+            <MacroCompare label={t('Protein')} logged={loggedTotals.protein} planned={plannedTotals.protein} goal={goals.protein} unit="g" color="var(--blue)" />
+            <MacroCompare label={t('Carbs')} logged={loggedTotals.carbs} planned={plannedTotals.carbs} goal={goals.carbs} unit="g" color="var(--orange)" />
+            <MacroCompare label={t('Fat')} logged={loggedTotals.fat} planned={plannedTotals.fat} goal={goals.fat} unit="g" color="var(--yellow)" />
+          </div>
+
+          {/* Selected recipes to log */}
+          {selectedRecipes.length > 0 && (
+            <div className="card">
+              <div className="row between" style={{ marginBottom: 10 }}>
+                <h3 style={{ margin: 0 }}>{t('Planned meals')}</h3>
+                <Button size="sm" variant="primary" onClick={logAllPlanned}>{t('Log all')}</Button>
+              </div>
+              {selectedRecipes.map(recipeId => {
+                const recipe = recipes.find(r => r.id === recipeId)
+                if (!recipe) return null
+                return (
+                  <div key={recipeId} style={{ padding: '10px 0', borderBottom: '0.5px solid var(--sep)' }}>
+                    <div className="row between">
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500 }}>{recipe.name}</div>
+                        <div className="muted small">
+                          {recipe.nutrition?.calories && `${recipe.nutrition.calories} kcal`}
+                          {recipe.nutrition?.protein && ` · ${recipe.nutrition.protein}g protein`}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <Button size="sm" variant="tinted" onClick={() => logPlannedMeal(recipe)}>{t('Log')}</Button>
+                        <button className="iconbtn" onClick={() => toggleRecipe(recipeId)} aria-label={t('Remove')}>
+                          <Icon name="xmark" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Recipe picker */}
+          <div className="card">
+            <div className="row between" style={{ marginBottom: 10 }}>
+              <h3 style={{ margin: 0 }}>{t('Add from recipes')}</h3>
+              <Button size="sm" icon="plus" onClick={() => onNav('/ranks/recipe')}>{t('New')}</Button>
+            </div>
+            {recipes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: 32 }}>🥗</div>
+                <div className="muted small" style={{ marginTop: 8 }}>
+                  {t('No recipes yet. Create your first recipe to start planning meals.')}
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <Button variant="primary" onClick={() => onNav('/ranks/recipe')}>{t('Create recipe')}</Button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {recipes.map(recipe => {
+                  const isSelected = selectedRecipes.includes(recipe.id)
+                  return (
+                    <div key={recipe.id} 
+                      className="tappable"
+                      onClick={() => toggleRecipe(recipe.id)}
+                      style={{ 
+                        padding: '10px 0', 
+                        borderBottom: '0.5px solid var(--sep)',
+                        cursor: 'pointer',
+                        background: isSelected ? 'var(--green)11' : 'transparent',
+                        marginLeft: -14, marginRight: -14, paddingLeft: 14, paddingRight: 14,
+                      }}>
+                      <div className="row between">
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="row" style={{ gap: 8 }}>
+                            <span style={{ 
+                              width: 20, height: 20, borderRadius: 4, 
+                              border: isSelected ? 'none' : '2px solid var(--sep)',
+                              background: isSelected ? 'var(--green)' : 'transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              {isSelected && <Icon name="check" style={{ color: 'white', fontSize: 12 }} />}
+                            </span>
+                            <div>
+                              <div style={{ fontWeight: 500 }}>{recipe.name}</div>
+                              <div className="muted small">
+                                {recipe.nutrition?.calories && `${recipe.nutrition.calories} kcal`}
+                                {recipe.nutrition?.protein && ` · ${recipe.nutrition.protein}g P`}
+                                {recipe.nutrition?.carbs && ` · ${recipe.nutrition.carbs}g C`}
+                                {recipe.nutrition?.fat && ` · ${recipe.nutrition.fat}g F`}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {plannerTab === 'recipes' && (
+        <>
+          {/* My recipes list */}
+          <div className="card">
+            <div className="row between" style={{ marginBottom: 10 }}>
+              <h3 style={{ margin: 0 }}>{t('My recipes')}</h3>
+              <Button size="sm" icon="plus" onClick={() => onNav('/ranks/recipe')}>{t('Create')}</Button>
+            </div>
+            {recipes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: 32 }}>📖</div>
+                <div className="muted small" style={{ marginTop: 8 }}>
+                  {t('Your recipe library is empty. Create recipes to track nutrition and plan meals.')}
+                </div>
+              </div>
+            ) : (
+              recipes.map(recipe => (
+                <div key={recipe.id} 
+                  className="tappable"
+                  onClick={() => onNav('/ranks/recipe')}
+                  style={{ padding: '12px 0', borderBottom: '0.5px solid var(--sep)', cursor: 'pointer' }}>
+                  <div className="row between">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 500 }}>{recipe.name}</div>
+                      <div className="muted small" style={{ marginTop: 2 }}>
+                        {recipe.nutrition?.calories && `${recipe.nutrition.calories} kcal`}
+                        {recipe.nutrition?.protein && ` · ${recipe.nutrition.protein}g protein`}
+                        {recipe.ingredients?.length > 0 && ` · ${recipe.ingredients.length} ingredients`}
+                      </div>
+                      {recipe.tags?.length > 0 && (
+                        <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                          {recipe.tags.slice(0, 3).map(tag => (
+                            <span key={tag} className="tag" style={{ fontSize: 10, padding: '2px 6px' }}>{tag}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <Icon name="chevronRight" className="chev" />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Quick actions */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="lrow tappable" onClick={() => onNav('/ranks/recipe')} style={{ borderBottom: 'var(--hair) solid var(--sep)' }}>
+              <span className="lrow-i" style={{ background: 'var(--acc)' }}><Icon name="plus" /></span>
+              <div className="lrow-c">
+                <div className="lrow-t">{t('Create new recipe')}</div>
+                <div className="lrow-s">{t('Add ingredients and nutrition info')}</div>
+              </div>
+              <Icon name="chevronRight" className="chev" />
+            </div>
+            <div className="lrow tappable" onClick={() => onNav('/ranks/recipe')}>
+              <span className="lrow-i" style={{ background: 'var(--blue)26', color: 'var(--blue)' }}><Icon name="compass" /></span>
+              <div className="lrow-c">
+                <div className="lrow-t">{t('Browse community recipes')}</div>
+                <div className="lrow-s">{t('Discover and save recipes from others')}</div>
+              </div>
+              <Icon name="chevronRight" className="chev" />
+            </div>
+          </div>
+        </>
+      )}
+    </>
   )
 }
