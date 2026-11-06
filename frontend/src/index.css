@@ -2324,6 +2324,99 @@ button.wl-summary{width:100%;padding:0 0 10px;text-align:start;border-radius:var
 /* Stats: the card Plan links to clears the sticky banners when it is scrolled to */
 #weekly-volume{scroll-margin-top:calc(var(--sat) + var(--conn) + 96px)}
 
+/* ------------------------------------------------- Plan Calendar (v1.4.x) -- */
+/* Calendar-centric plan view with week/month toggle */
+.plan-cal-controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px}
+.plan-period-btn{background:none;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+.plan-period-btn:hover{background:var(--surface-2)}
+.plan-period-label{font-weight:600;font-size:16px;color:var(--label)}
+
+/* Calendar grid */
+.plan-calendar{margin-bottom:16px;background:var(--surface-1);border-radius:12px;padding:12px;border:0.5px solid var(--sep)}
+.plan-cal-header{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px}
+.plan-cal-dow{text-align:center;font-size:12px;font-weight:600;color:var(--label-3);text-transform:uppercase;letter-spacing:0.02em;padding:4px}
+.plan-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+
+/* Calendar day cell */
+.plan-cal-day{
+  aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  border-radius:10px;border:none;background:none;cursor:pointer;padding:4px;position:relative;
+  transition:background var(--fast),transform var(--fast)
+}
+.plan-cal-day:hover{background:var(--surface-2)}
+.plan-cal-day:active{transform:scale(0.96)}
+.plan-cal-day.is-today .plan-cal-num{background:var(--acc);color:var(--on-acc);border-radius:50%;width:28px;height:28px;display:grid;place-items:center}
+.plan-cal-day.is-selected{background:var(--acc-soft);outline:2px solid var(--acc);outline-offset:-2px}
+.plan-cal-day.is-other-month{opacity:0.4}
+.plan-cal-day.is-past:not(.is-today):not(.is-selected){opacity:0.6}
+.plan-cal-num{font-size:14px;font-weight:500;color:var(--label);line-height:1}
+
+/* Activity dots */
+.plan-cal-dots{display:flex;gap:3px;height:6px;align-items:center}
+.plan-cal-dot{width:6px;height:6px;border-radius:50%}
+.plan-cal-dot.workout{background:var(--blue)}
+.plan-cal-dot.meal{background:var(--green)}
+.plan-cal-dot.secondary{opacity:0.4;width:4px;height:4px}
+
+/* Week view: show preview text */
+.plan-calendar.week .plan-cal-day{aspect-ratio:auto;min-height:70px;justify-content:flex-start;padding:8px 4px}
+.plan-calendar.week .plan-cal-num{margin-bottom:4px}
+.plan-cal-preview{width:100%;text-align:center;margin-top:auto}
+.plan-cal-preview-text{font-size:11px;color:var(--label-2);line-height:1.2;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.plan-cal-preview-text.dim{color:var(--label-3)}
+
+/* Detail panel */
+.plan-detail-panel{background:var(--surface-1);border-radius:12px;padding:16px;margin-bottom:16px;border:0.5px solid var(--sep)}
+.plan-detail-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:12px}
+.plan-detail-header h3{font-size:18px;margin:0}
+.plan-detail-content{display:flex;flex-direction:column;gap:8px}
+.plan-detail-empty{text-align:center;padding:24px 16px;color:var(--label-2)}
+.plan-detail-routine{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--sep);cursor:pointer}
+.plan-detail-routine:last-child{border-bottom:none}
+.plan-detail-routine:hover{background:var(--surface-2);margin:0 -16px;padding:10px 16px}
+.plan-detail-rotation-info{background:var(--surface-2);border-radius:8px;padding:12px}
+.plan-next-workout{display:flex;align-items:center;gap:10px;margin-top:8px;padding:8px;background:var(--surface-1);border-radius:8px}
+.plan-next-workout .icn{font-size:20px;color:var(--acc)}
+
+/* Macro grid in meal detail */
+.plan-macros-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px;background:var(--surface-2);border-radius:8px;margin-bottom:12px}
+.plan-macro{text-align:center}
+.plan-macro-value{font-size:16px;font-weight:700}
+.plan-macro-label{font-size:11px;color:var(--label-3)}
+
+/* Meal items */
+.plan-meal-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--sep)}
+.plan-meal-item:last-child{border-bottom:none}
+.plan-meal-info{flex:1;min-width:0}
+.plan-meal-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plan-meal-macros{font-size:13px;color:var(--label-2)}
+.plan-meal-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.plan-servings{display:flex;align-items:center;gap:2px}
+.plan-servings-value{min-width:32px;text-align:center;font-weight:500}
+.iconbtn.small{width:26px;height:26px;font-size:12px}
+
+/* Quick actions bar */
+.plan-actions{display:flex;gap:8px;margin-bottom:16px}
+
+/* Quick links section */
+.plan-links{margin-top:8px}
+
+/* Routine manager modal */
+.plan-routine-manager-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:flex-end;justify-content:center;
+  animation:fadeIn var(--fast)
+}
+.plan-routine-manager{
+  background:var(--bg);border-radius:16px 16px 0 0;width:100%;max-width:500px;max-height:85vh;
+  display:flex;flex-direction:column;animation:slideUp var(--fast)
+}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.plan-routine-manager-header{display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:0.5px solid var(--sep)}
+.plan-routine-manager-header h2{margin:0;font-size:20px}
+.plan-mode-section{padding:0 16px}
+.plan-routine-manager-actions{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:0.5px solid var(--sep)}
+.plan-routine-list{flex:1;overflow-y:auto;padding:0 16px 16px}
+
 /* ------------------------------------------------- duration wheel picker -- */
 /* components/DurationWheel.jsx: two scroll-snap wheels under one highlight band. --dw-item is
    WHEEL_ITEM there. The band sits behind the rows; the rows fade and lean back toward the edges
