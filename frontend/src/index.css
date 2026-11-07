@@ -2335,7 +2335,7 @@ button.wl-summary{width:100%;padding:0 0 10px;text-align:start;border-radius:var
 .plan-calendar{margin-bottom:16px;background:var(--surface-1);border-radius:12px;padding:16px;border:0.5px solid var(--sep)}
 .plan-cal-header{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:8px}
 .plan-cal-dow{text-align:center;font-size:11px;font-weight:600;color:var(--label-3);text-transform:uppercase;letter-spacing:0.05em;padding:6px 0}
-.plan-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.plan-cal-grid,.plan .plan-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
 .plan-cal-grid>.plan-cal-day{width:100%;min-width:0}
 
 /* Calendar day cell - base styles */
