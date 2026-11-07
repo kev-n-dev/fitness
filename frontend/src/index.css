@@ -2333,39 +2333,43 @@ button.wl-summary{width:100%;padding:0 0 10px;text-align:start;border-radius:var
 
 /* Calendar grid */
 .plan-calendar{margin-bottom:16px;background:var(--surface-1);border-radius:12px;padding:16px;border:0.5px solid var(--sep)}
-.plan-cal-header{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:12px}
+.plan-cal-header{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:12px}
 .plan-cal-dow{text-align:center;font-size:11px;font-weight:600;color:var(--label-3);text-transform:uppercase;letter-spacing:0.05em;padding:6px 2px}
-.plan-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.plan-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
 
-/* Calendar day cell */
+/* Calendar day cell - base styles */
 .plan-cal-day{
-  aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-  border-radius:10px;border:none;background:none;cursor:pointer;padding:4px;position:relative;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px;
+  border-radius:12px;border:none;background:var(--surface-2);cursor:pointer;padding:10px 6px;
+  position:relative;min-height:80px;
   transition:background var(--fast),transform var(--fast)
 }
-.plan-cal-day:hover{background:var(--surface-2)}
-.plan-cal-day:active{transform:scale(0.96)}
-.plan-cal-day.is-today .plan-cal-num{background:var(--acc);color:var(--on-acc);border-radius:50%;width:28px;height:28px;display:grid;place-items:center}
+.plan-cal-day:hover{background:var(--surface-3)}
+.plan-cal-day:active{transform:scale(0.97)}
+.plan-cal-day.is-today .plan-cal-num{background:var(--acc);color:var(--on-acc);border-radius:50%;width:32px;height:32px;display:grid;place-items:center}
 .plan-cal-day.is-selected{background:var(--acc-soft);outline:2px solid var(--acc);outline-offset:-2px}
 .plan-cal-day.is-other-month{opacity:0.4}
-.plan-cal-day.is-past:not(.is-today):not(.is-selected){opacity:0.6}
-.plan-cal-num{font-size:14px;font-weight:500;color:var(--label);line-height:1}
+.plan-cal-day.is-past:not(.is-today):not(.is-selected){opacity:0.7}
+.plan-cal-num{font-size:16px;font-weight:600;color:var(--label);line-height:1}
 
 /* Activity dots */
-.plan-cal-dots{display:flex;gap:3px;height:6px;align-items:center}
+.plan-cal-dots{display:flex;gap:3px;height:8px;align-items:center;margin-top:4px}
 .plan-cal-dot{width:6px;height:6px;border-radius:50%}
 .plan-cal-dot.workout{background:var(--blue)}
 .plan-cal-dot.meal{background:var(--green)}
-.plan-cal-dot.secondary{opacity:0.4;width:4px;height:4px}
+.plan-cal-dot.secondary{opacity:0.4;width:5px;height:5px}
 
-/* Week view: show preview text with taller cards */
-.plan-calendar.week .plan-cal-day{aspect-ratio:auto;min-height:90px;justify-content:flex-start;padding:12px 8px;border-radius:12px;background:var(--surface-2)}
-.plan-calendar.week .plan-cal-day:hover{background:var(--surface-3)}
-.plan-calendar.week .plan-cal-day.is-selected{background:var(--acc-soft)}
-.plan-calendar.week .plan-cal-num{margin-bottom:8px;font-size:16px;font-weight:600}
-.plan-cal-preview{width:100%;text-align:center;margin-top:auto;padding:0 2px}
-.plan-cal-preview-text{font-size:10px;color:var(--label-2);line-height:1.3;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;word-break:break-word}
+/* Week view: taller cards with preview text */
+.plan-calendar.week .plan-cal-day{min-height:100px;padding:12px 8px}
+.plan-calendar.week .plan-cal-num{font-size:18px}
+.plan-cal-preview{width:100%;text-align:center;margin-top:auto;padding:4px 2px}
+.plan-cal-preview-text{font-size:11px;color:var(--label-2);line-height:1.3;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;word-break:break-word}
 .plan-cal-preview-text.dim{color:var(--label-3);font-style:italic}
+
+/* Month view: compact square cells */
+.plan-calendar.month .plan-cal-day{min-height:auto;aspect-ratio:1;padding:6px 4px;justify-content:center}
+.plan-calendar.month .plan-cal-num{font-size:14px}
+.plan-calendar.month .plan-cal-preview{display:none}
 
 /* Detail panel */
 .plan-detail-panel{background:var(--surface-1);border-radius:12px;padding:16px;margin-bottom:16px;border:0.5px solid var(--sep)}
