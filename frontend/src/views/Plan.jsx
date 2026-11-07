@@ -133,16 +133,19 @@ function getCalendarDays(year, month, weekStart) {
 // Get week days for a specific week starting from a date
 function getWeekDays(startDate, weekStart) {
   const days = []
-  const d = new Date(startDate)
+  // Parse as local date to avoid timezone issues
+  const [y, m, dd] = startDate.split('-').map(Number)
+  const d = new Date(y, m - 1, dd)
   // Adjust to week start
   const currentDay = d.getDay()
   const diff = (currentDay - weekStart + 7) % 7
   d.setDate(d.getDate() - diff)
   
   for (let i = 0; i < 7; i++) {
-    const day = new Date(d)
-    day.setDate(d.getDate() + i)
-    days.push(day.toISOString().slice(0, 10))
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i)
+    // Format as YYYY-MM-DD without timezone conversion
+    const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+    days.push(iso)
   }
   return days
 }
