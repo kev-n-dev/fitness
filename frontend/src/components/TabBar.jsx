@@ -6,7 +6,7 @@ import { t } from '../lib/i18n.js'
 import Icon from './Icon.jsx'
 import Elapsed from './Elapsed.jsx'
 import { useConnectionTrouble } from './SyncBanner.jsx'
-import { menuSheet } from '../sheets.jsx'
+import { menuSheet, startFlow } from '../sheets.jsx'
 
 // Module scope, not TabBar's render body. Declared inside it, `Tab` was a new function on every
 // render, so React saw a different component type each time and threw the button away and built a
@@ -59,7 +59,7 @@ export default function TabBar({ onStart }) {
               icon: 'play',
               label: t('Freestyle'),
               sub: t('Start an empty workout session'),
-              onClick: () => nav('/workout')
+              onClick: () => startFlow([])
             }
           ].filter(Boolean)
         },
@@ -76,7 +76,7 @@ export default function TabBar({ onStart }) {
               icon: 'plus',
               label: t('New meal'),
               sub: t('Add a new meal entry'),
-              onClick: () => nav('/nutrition')
+              onClick: () => nav('/log-meal')
             }
           ]
         }

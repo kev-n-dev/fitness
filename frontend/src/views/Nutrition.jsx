@@ -107,13 +107,28 @@ function MealRow({ meal, onDelete }) {
   return (
     <div style={{ padding: '10px 0', borderBottom: '0.5px solid var(--sep)' }}>
       <div className="row between">
-        <div style={{ fontWeight: 500 }}>{meal.name}</div>
+        <div className="row" style={{ gap: 10 }}>
+          {meal.photo && (
+            <img
+              src={meal.photo}
+              alt=""
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 6,
+                objectFit: 'cover',
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <div style={{ fontWeight: 500 }}>{meal.name || t('Meal')}</div>
+        </div>
         <button className="iconbtn" onClick={() => onDelete(meal.id)} aria-label="Remove" style={{ fontSize: 16 }}>
           <Icon name="trash" />
         </button>
       </div>
       {parts.length > 0 && (
-        <div className="muted small" style={{ marginTop: 2, lineHeight: 1.6 }}>
+        <div className="muted small" style={{ marginTop: 2, lineHeight: 1.6, marginLeft: meal.photo ? 50 : 0 }}>
           {parts.join(' · ')}
         </div>
       )}

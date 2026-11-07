@@ -55,6 +55,7 @@ import TerritoryRank from './views/TerritoryRank.jsx'
 import Leaderboard from './views/Leaderboard.jsx'
 import Challenges from './views/Challenges.jsx'
 import Nutrition from './views/Nutrition.jsx'
+import LogMeal from './views/LogMeal.jsx'
 import UserProfile from './views/UserProfile.jsx'
 import Social from './views/Social.jsx'
 
@@ -247,6 +248,7 @@ function Shell() {
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/challenges" element={<Challenges />} />
               <Route path="/nutrition" element={<Nutrition />} />
+              <Route path="/log-meal" element={<LogMeal />} />
               <Route path="/profile"  element={<UserProfile />} />
               <Route path="/social"   element={<Social />} />
               <Route path="*" element={<Navigate to="/home" replace />} />
