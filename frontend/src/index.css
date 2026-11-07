@@ -462,7 +462,7 @@ h4.sec{
 }
 
 /* ------------------------------------------------------------ week strip -- */
-.week{display:flex;justify-content:space-between;gap:4px}
+.week:not(.plan-calendar){display:flex;justify-content:space-between;gap:4px}
 .wday{
   flex:1;text-align:center;padding:8px 2px 9px;border-radius:10px;
   background:none;border:none;transition:background var(--fast);
